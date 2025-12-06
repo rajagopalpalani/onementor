@@ -6,6 +6,8 @@ import Header from "@/components/Header/header";
 import Footer from "@/components/Footer/footer";
 import { toastrSuccess, toastrError } from "@/components/ui/toaster/toaster";
 import { ArrowLeftIcon, CalendarDaysIcon, ClockIcon, CurrencyRupeeIcon } from "@heroicons/react/24/outline";
+import { getMentorProfile, getSlotsByMentor } from "@/services/mentor/mentor";
+import { bookSlot } from "@/services/booking/booking";
 
 const BookSessionPage = () => {
   const [coach, setCoach] = useState(null);
@@ -13,96 +15,160 @@ const BookSessionPage = () => {
   const [selectedTime, setSelectedTime] = useState("");
   const [sessionType, setSessionType] = useState("standard");
   const [loading, setLoading] = useState(false);
+  const [availableSlots, setAvailableSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const coachId = searchParams.get('coachId');
 
-  // Mock coach data based on ID
-  const mockCoaches = {
-    1: {
-      id: 1,
-      name: "Dr. Sarah Johnson",
-      expertise: "Career Development",
-      skills: "Leadership, Communication, Strategic Planning",
-      rating: 4.9,
-      sessions_completed: 150,
-      price: "₹1500",
-      bio: "Experienced career coach with 10+ years helping professionals advance their careers.",
-      image: "/images/coach1.jpg"
-    },
-    2: {
-      id: 2,
-      name: "Michael Chen",
-      expertise: "Technology Leadership",
-      skills: "Software Development, Team Management, Product Strategy",
-      rating: 4.8,
-      sessions_completed: 120,
-      price: "₹2000",
-      bio: "Tech industry veteran specializing in leadership development for software teams.",
-      image: "/images/coach2.jpg"
-    },
-    3: {
-      id: 3,
-      name: "Emily Rodriguez",
-      expertise: "Personal Development",
-      skills: "Goal Setting, Time Management, Work-Life Balance",
-      rating: 4.9,
-      sessions_completed: 200,
-      price: "₹1200",
-      bio: "Certified life coach focused on helping individuals achieve personal and professional goals.",
-      image: "/images/coach3.jpg"
-    },
-    4: {
-      id: 4,
-      name: "David Kumar",
-      expertise: "Business Strategy",
-      skills: "Entrepreneurship, Marketing, Financial Planning",
-      rating: 4.7,
-      sessions_completed: 80,
-      price: "₹2500",
-      bio: "Serial entrepreneur and business consultant with expertise in scaling startups.",
-      image: "/images/coach4.jpg"
-    },
-    5: {
-      id: 5,
-      name: "Lisa Thompson",
-      expertise: "Communication Skills",
-      skills: "Public Speaking, Negotiation, Conflict Resolution",
-      rating: 4.8,
-      sessions_completed: 160,
-      price: "₹1800",
-      bio: "Communication expert helping professionals improve their interpersonal skills.",
-      image: "/images/coach5.jpg"
-    },
-    6: {
-      id: 6,
-      name: "James Wilson",
-      expertise: "Financial Planning",
-      skills: "Investment Strategy, Retirement Planning, Wealth Management",
-      rating: 4.9,
-      sessions_completed: 90,
-      price: "₹3000",
-      bio: "Certified financial planner with 15+ years of experience in wealth management.",
-      image: "/images/coach6.jpg"
-    }
-  };
-
   useEffect(() => {
-    if (coachId && mockCoaches[coachId]) {
-      setCoach(mockCoaches[coachId]);
-    } else {
-      router.push('/dashboard/userdashboard/coachdiscovery');
-    }
+    const fetchCoachData = async () => {
+      if (!coachId) {
+        toastrError("No coach selected");
+        router.push('/dashboard/userdashboard/coachdiscovery');
+        return;
+      }
+
+      try {
+        const response = await getMentorProfile(coachId);
+        
+        if (response.error) {
+          toastrError(response.error || "Failed to load coach information");
+          router.push('/dashboard/userdashboard/coachdiscovery');
+          return;
+        }
+
+        const mentor = response;
+        
+        // Handle skills - can be JSON string, array, or null
+        let skillsText = '';
+        if (mentor.skills) {
+          try {
+            const skillsArray = typeof mentor.skills === 'string' 
+              ? JSON.parse(mentor.skills) 
+              : mentor.skills;
+            skillsText = Array.isArray(skillsArray) 
+              ? skillsArray.join(', ') 
+              : (typeof mentor.skills === 'string' ? mentor.skills : '');
+          } catch (e) {
+            skillsText = typeof mentor.skills === 'string' ? mentor.skills : '';
+          }
+        }
+
+        // Transform API data to match component expectations
+        const coachData = {
+          id: mentor.user_id,
+          name: mentor.name || mentor.username || 'Unknown',
+          expertise: mentor.category || 'Not specified',
+          skills: skillsText,
+          rating: mentor.rating || 0,
+          sessions_completed: mentor.total_sessions || 0,
+          price: mentor.hourly_rate ? `₹${parseFloat(mentor.hourly_rate).toLocaleString('en-IN')}` : '₹0',
+          bio: mentor.bio || '',
+          hourly_rate: mentor.hourly_rate || 0
+        };
+
+        setCoach(coachData);
+      } catch (error) {
+        console.error("Error fetching coach data:", error);
+        toastrError("Failed to load coach information");
+        router.push('/dashboard/userdashboard/coachdiscovery');
+      }
+    };
+
+    fetchCoachData();
   }, [coachId, router]);
 
-  const sessionTypes = [
-    { id: "quick", name: "Quick Session", duration: "30 min", price: "₹1000" },
-    { id: "standard", name: "Standard Session", duration: "60 min", price: coach?.price || "₹1500" },
-    { id: "extended", name: "Extended Session", duration: "90 min", price: "₹2500" }
-  ];
+  // Fetch available slots when date is selected
+  useEffect(() => {
+    const fetchAvailableSlots = async () => {
+      if (!selectedDate || !coachId) {
+        setAvailableSlots([]);
+        setSelectedTime(""); // Clear selected time when date changes
+        return;
+      }
 
-  const timeSlots = [
-    "09:00", "10:00", "11:00", "12:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00"
+      setLoadingSlots(true);
+      try {
+        console.log("Fetching slots for mentor:", coachId, "date:", selectedDate);
+        
+        const slotsResponse = await getSlotsByMentor(coachId, {
+          date: selectedDate,
+          is_booked: 0,
+          is_active: 1
+        });
+
+        console.log("Slots response:", slotsResponse);
+
+        if (slotsResponse.error) {
+          console.error("Error fetching slots:", slotsResponse.error);
+          setAvailableSlots([]);
+          return;
+        }
+
+        const slots = Array.isArray(slotsResponse) ? slotsResponse : [];
+        console.log("Parsed slots:", slots);
+        
+        // Format slots to extract time and create time slot objects
+        const formattedSlots = slots.map(slot => {
+          // Handle time format - could be "HH:MM:SS" or "HH:MM"
+          let startTime = '';
+          let endTime = '';
+          
+          if (slot.start_time) {
+            startTime = slot.start_time.includes(':') 
+              ? slot.start_time.substring(0, 5) // Get HH:MM from "HH:MM:SS"
+              : slot.start_time;
+          }
+          
+          if (slot.end_time) {
+            endTime = slot.end_time.includes(':')
+              ? slot.end_time.substring(0, 5) // Get HH:MM from "HH:MM:SS"
+              : slot.end_time;
+          }
+          
+          return {
+            id: slot.id,
+            start_time: startTime,
+            end_time: endTime,
+            date: slot.date,
+            slot_id: slot.id
+          };
+        });
+
+        console.log("Formatted slots:", formattedSlots);
+        setAvailableSlots(formattedSlots);
+        setSelectedTime(""); // Clear selected time when new slots are loaded
+      } catch (error) {
+        console.error("Error fetching available slots:", error);
+        setAvailableSlots([]);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+
+    fetchAvailableSlots();
+  }, [selectedDate, coachId]);
+
+  const sessionTypes = [
+    { 
+      id: "quick", 
+      name: "Quick Session", 
+      duration: "30 min", 
+      price: coach?.hourly_rate ? `₹${Math.round(parseFloat(coach.hourly_rate) / 2).toLocaleString('en-IN')}` : "₹0" 
+    },
+    { 
+      id: "standard", 
+      name: "Standard Session", 
+      duration: "60 min", 
+      price: coach?.price || (coach?.hourly_rate ? `₹${parseFloat(coach.hourly_rate).toLocaleString('en-IN')}` : "₹0") 
+    },
+    { 
+      id: "extended", 
+      name: "Extended Session", 
+      duration: "90 min", 
+      price: coach?.hourly_rate ? `₹${Math.round(parseFloat(coach.hourly_rate) * 1.5).toLocaleString('en-IN')}` : "₹0" 
+    }
   ];
 
   const handleBooking = async () => {
@@ -121,23 +187,8 @@ const BookSessionPage = () => {
     setLoading(true);
     
     try {
-      // First, get available slots for the mentor
-      const slotsRes = await fetch(
-        `http://localhost:8001/api/mentor/slots/mentor/${coachId}?date=${selectedDate}&is_booked=0&is_active=1`,
-        { credentials: 'include' }
-      );
-      
-      if (!slotsRes.ok) {
-        throw new Error("Failed to fetch available slots");
-      }
-      
-      const slots = await slotsRes.json();
-      
-      // Find matching slot
-      const matchingSlot = slots.find(slot => {
-        const slotTime = slot.start_time.substring(0, 5); // Get HH:MM format
-        return slotTime === selectedTime;
-      });
+      // Find matching slot from available slots
+      const matchingSlot = availableSlots.find(slot => slot.start_time === selectedTime);
 
       if (!matchingSlot) {
         toastrError("Selected slot is no longer available. Please choose another time.");
@@ -153,19 +204,11 @@ const BookSessionPage = () => {
         notes: `Session type: ${sessionType}`
       };
 
-      const bookingRes = await fetch("http://localhost:8001/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: 'include',
-        body: JSON.stringify(bookingData),
-      });
+      const bookingResult = await bookSlot(bookingData);
 
-      if (!bookingRes.ok) {
-        const error = await bookingRes.json();
-        throw new Error(error.error || "Failed to create booking");
+      if (bookingResult.error) {
+        throw new Error(bookingResult.error || "Failed to create booking");
       }
-
-      const bookingResult = await bookingRes.json();
       
         // Redirect to payment if payment URL is provided
         if (bookingResult.payment && bookingResult.payment.payment_url) {
@@ -327,23 +370,44 @@ const BookSessionPage = () => {
               <div className="mb-6">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   <ClockIcon className="w-4 h-4 inline mr-1" />
-                  Select Time
+                  Select Time {!selectedDate && <span className="text-gray-400 text-xs">(Select a date first)</span>}
                 </label>
-                <div className="grid grid-cols-5 gap-2">
-                  {timeSlots.map((time) => (
-                    <button
-                      key={time}
-                      className={`p-3 text-sm rounded-lg border transition-all ${
-                        selectedTime === time
-                          ? 'border-[var(--primary)] bg-blue-50 text-[var(--primary)]'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                      onClick={() => setSelectedTime(time)}
-                    >
-                      {time}
-                    </button>
-                  ))}
-                </div>
+                {loadingSlots ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="spinner mr-2"></div>
+                    <span className="text-gray-600">Loading available slots...</span>
+                  </div>
+                ) : availableSlots.length > 0 ? (
+                  <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                    {availableSlots.map((slot) => (
+                      <button
+                        key={slot.id}
+                        className={`p-3 text-sm rounded-lg border transition-all ${
+                          selectedTime === slot.start_time
+                            ? 'border-[var(--primary)] bg-blue-50 text-[var(--primary)] font-semibold'
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                        onClick={() => setSelectedTime(slot.start_time)}
+                      >
+                        {slot.start_time}
+                        {slot.end_time && (
+                          <span className="block text-xs text-gray-500 mt-1">
+                            - {slot.end_time}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ) : selectedDate ? (
+                  <div className="p-6 text-center bg-gray-50 rounded-lg border border-gray-200">
+                    <p className="text-gray-600 mb-2">No available slots for this date</p>
+                    <p className="text-sm text-gray-500">Please select another date or contact the coach</p>
+                  </div>
+                ) : (
+                  <div className="p-6 text-center bg-gray-50 rounded-lg border border-gray-200">
+                    <p className="text-gray-600">Please select a date to see available time slots</p>
+                  </div>
+                )}
               </div>
 
               {/* Booking Summary */}

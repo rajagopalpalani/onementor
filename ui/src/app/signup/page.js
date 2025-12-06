@@ -5,10 +5,12 @@ import Footer from "@/components/Footer/footer";
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createUser } from "@/services/user/user";
 import { toastrSuccess, toastrError } from "@/components/ui/toaster/toaster";
 
 export default function Signup() {
+  const router = useRouter();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -18,7 +20,6 @@ export default function Signup() {
     role: "",
   });
   const [loading, setLoading] = useState(false);
-  const [redirectPath, setRedirectPath] = useState(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -59,10 +60,12 @@ export default function Signup() {
       if (response.error) {
         toastrError(response.error);
       } else if (response.message) {
-        toastrSuccess(response.message || "Account created successfully! Please verify your email and login.");
+        toastrSuccess(response.message || "Account created successfully! Please verify your email.");
+        // Redirect to OTP verify page with email and role
         setTimeout(() => {
-          window.location.href = "/login";
-        }, 2000);
+          const roleParam = formData.role === 'coach' ? 'coach' : 'user';
+          router.push(`/verify-otp?email=${encodeURIComponent(formData.email)}&role=${roleParam}`);
+        }, 1000);
       } else {
         toastrError("Signup failed");
       }
@@ -79,10 +82,10 @@ export default function Signup() {
       <MainHeader />
 
       <main className="flex-grow flex items-center justify-center px-6 py-16 md:py-20 lg:py-24 bg-gradient-to-br from-gray-50 to-gray-100">
-        <div className="w-full max-w-7xl grid md:grid-cols-2 gap-12 md:gap-16 lg:gap-20 items-center">
+        <div className="w-full max-w-7xl grid md:grid-cols-2 gap-12 md:gap-16 lg:gap-20 items-start">
           
           {/* Left Side - Information */}
-          <div className="hidden md:flex flex-col justify-center space-y-10 fade-in">
+          <div className="hidden md:flex flex-col justify-start space-y-10 fade-in pt-8">
             <div className="text-center space-y-6">
               <div className="inline-block">
                 <Image 
@@ -161,7 +164,7 @@ export default function Signup() {
           </div>
 
           {/* Right Side - Signup Form */}
-          <div className="card glass-effect max-w-md w-full mx-auto spacing-extra-generous fade-in">
+          <div className="card glass-effect max-w-md w-full mx-auto spacing-extra-generous fade-in pt-8">
             <div className="text-center mb-10 md:mb-12">
               <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] mb-6">
                 <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">

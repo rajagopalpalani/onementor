@@ -1,18 +1,30 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8001';
 
 // Create/Update mentor profile
-export async function createMentorProfile(formData) {
+// Accepts either FormData (for profile with resume) or plain object (for JSON requests like hourly_rate)
+export async function createMentorProfile(data) {
   try {
-    const res = await fetch(`${API_BASE}/api/mentor/profile`, {
+    const isFormData = data instanceof FormData;
+    
+    const options = {
       method: 'POST',
       credentials: 'include',
-      body: formData, // FormData with file
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      return { error: data.error || 'Failed to save mentor profile' };
+    };
+    
+    if (isFormData) {
+      options.body = data;
+    } else {
+      options.headers = { 'Content-Type': 'application/json' };
+      options.body = JSON.stringify(data);
     }
-    return data;
+    
+    const res = await fetch(`${API_BASE}/api/mentor/profile`, options);
+    const responseData = await res.json();
+    
+    if (!res.ok) {
+      return { error: responseData.error || 'Failed to save mentor profile' };
+    }
+    return responseData;
   } catch (err) {
     console.error('createMentorProfile error', err);
     return { error: 'Network error' };
@@ -79,8 +91,16 @@ export async function createSlot(slotData) {
 // Get slots by mentor
 export async function getSlotsByMentor(mentorId, filters = {}) {
   try {
-    const queryParams = new URLSearchParams(filters);
-    const res = await fetch(`${API_BASE}/api/mentor/slots/mentor/${mentorId}?${queryParams}`, {
+    // Build query params, converting numbers to strings for URLSearchParams
+    const queryParams = new URLSearchParams();
+    Object.keys(filters).forEach(key => {
+      if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
+        queryParams.append(key, String(filters[key]));
+      }
+    });
+    
+    const url = `${API_BASE}/api/mentor/slots/mentor/${mentorId}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const res = await fetch(url, {
       method: 'GET',
       credentials: 'include',
     });

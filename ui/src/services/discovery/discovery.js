@@ -5,7 +5,8 @@ export async function discoverMentors(filters = {}) {
   try {
     const queryParams = new URLSearchParams();
     Object.keys(filters).forEach(key => {
-      if (filters[key]) {
+      // Only add non-empty values to query params
+      if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
         queryParams.append(key, filters[key]);
       }
     });

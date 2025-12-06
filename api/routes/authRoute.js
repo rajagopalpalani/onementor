@@ -46,6 +46,16 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Account is deactivated' });
     }
 
+    // Check if user is verified
+    if (!user.is_verified || user.is_verified === 0) {
+      return res.status(403).json({ 
+        error: 'Email not verified. Please verify your email first.',
+        requiresVerification: true,
+        email: user.email,
+        role: user.role
+      });
+    }
+
     // Verify password
     const isValidPassword = await verifyPassword(password, user.password_hash);
     if (!isValidPassword) {

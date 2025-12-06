@@ -6,8 +6,11 @@ exports.getSlotsByMentor = async (req, res) => {
     const { mentorId } = req.params;
     const { date, is_booked, is_active } = req.query;
 
+    console.log("getSlotsByMentor - mentorId:", mentorId);
+    console.log("getSlotsByMentor - query params:", { date, is_booked, is_active });
+
     let query = `
-      SELECT id, date, start_time, end_time, is_booked, is_active, created_at
+      SELECT id, date, start_time, end_time, is_booked, is_active, created_at, amount, currency
       FROM mentor_slots 
       WHERE mentor_id = ?
     `;
@@ -18,23 +21,42 @@ exports.getSlotsByMentor = async (req, res) => {
       params.push(date);
     }
 
-    if (is_booked !== undefined) {
+    if (is_booked !== undefined && is_booked !== '') {
+      // Handle both string and number values: '0', 0, 'false', 'true', '1', 1
+      const bookedValue = (is_booked === 'true' || is_booked === '1' || is_booked === 1) ? 1 : 0;
       query += " AND is_booked = ?";
-      params.push(is_booked === 'true' ? 1 : 0);
+      params.push(bookedValue);
     }
 
-    if (is_active !== undefined) {
+    if (is_active !== undefined && is_active !== '') {
+      // Handle both string and number values: '0', 0, 'false', 'true', '1', 1
+      const activeValue = (is_active === 'true' || is_active === '1' || is_active === 1) ? 1 : 0;
       query += " AND is_active = ?";
-      params.push(is_active === 'true' ? 1 : 0);
+      params.push(activeValue);
     }
 
     query += " ORDER BY date, start_time";
 
+    console.log("Final query:", query);
+    console.log("Query params:", params);
+
     const [results] = await db.query(query, params);
+    
+    console.log(`Found ${results.length} slots for mentor ${mentorId}`);
+    
+    // Also check if mentor has any slots at all (for debugging)
+    if (results.length === 0) {
+      const [allSlots] = await db.query(
+        "SELECT COUNT(*) as total FROM mentor_slots WHERE mentor_id = ?",
+        [mentorId]
+      );
+      console.log(`Total slots for mentor ${mentorId}:`, allSlots[0]?.total || 0);
+    }
+    
     res.json(results);
   } catch (err) {
     console.error("DB Error:", err);
-    res.status(500).json({ error: "Database error" });
+    res.status(500).json({ error: "Database error", details: err.message });
   }
 };
 

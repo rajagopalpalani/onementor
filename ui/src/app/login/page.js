@@ -33,7 +33,34 @@ export default function Login() {
       const result = await login(formData.email, formData.password);
       
       if (result.error) {
-        toastrError(result.error);
+        // Check if user needs verification
+        if (result.requiresVerification) {
+          toastrError(result.error);
+          // Send OTP and redirect to verify-otp page
+          const userEmail = result.email || formData.email;
+          const roleParam = result.role === 'mentor' || result.role === 'user';
+          
+          // Send OTP automatically
+          sendOTP(userEmail).then((otpResult) => {
+            if (otpResult.error) {
+              toastrError("Failed to send OTP. Please try again.");
+            } else {
+              toastrSuccess("OTP sent to your email!");
+            }
+            // Redirect to verify-otp page
+            setTimeout(() => {
+              router.push(`/verify-otp?email=${encodeURIComponent(userEmail)}&role=${roleParam}`);
+            }, 1000);
+          }).catch((err) => {
+            console.error("Error sending OTP:", err);
+            // Still redirect even if OTP send fails
+            setTimeout(() => {
+              router.push(`/verify-otp?email=${encodeURIComponent(userEmail)}&role=${roleParam}`);
+            }, 1000);
+          });
+        } else {
+          toastrError(result.error);
+        }
       } else {
         // Store user data
         if (result.user) {

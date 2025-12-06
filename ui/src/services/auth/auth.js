@@ -11,7 +11,12 @@ export async function login(email, password) {
     });
     const data = await res.json();
     if (!res.ok) {
-      return { error: data.error || 'Login failed' };
+      return { 
+        error: data.error || 'Login failed',
+        requiresVerification: data.requiresVerification || false,
+        email: data.email,
+        role: data.role
+      };
     }
     return data;
   } catch (err) {

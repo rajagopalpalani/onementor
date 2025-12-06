@@ -16,7 +16,19 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // POST mentor profile (create or update)
-router.post("/", upload.single("resume"), createMentorProfile);
+// Handle both FormData (with file) and JSON (without file)
+router.post("/", (req, res, next) => {
+  // Check if request has multipart/form-data content type
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('multipart/form-data')) {
+    // Use multer for file upload
+    upload.single("resume")(req, res, next);
+  } else {
+    // For JSON requests, skip multer but ensure body is parsed
+    // Express body-parser should have already parsed JSON
+    next();
+  }
+}, createMentorProfile);
 
 // GET mentor profile by user_id
 router.get("/:user_id", getMentorProfile);
