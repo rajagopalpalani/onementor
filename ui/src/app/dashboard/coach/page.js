@@ -206,24 +206,24 @@ export default function CoachDashboard() {
               link="/dashboard/coachdashboard/manageschedule" 
               disabledMessage="Complete setup tasks to unlock"
             />
-            <Card 
+            {/* <Card 
               title="View Requests" 
               description="Check pending session requests"
               icon={<CalendarIcon className="w-8 h-8" />} 
               link="/dashboard/coachdashboard/request" 
-            />
+            /> */}
             <Card 
               title="Manage Bookings" 
               description="Accept or decline session requests"
               icon={<BellIcon className="w-8 h-8" />} 
               link="/dashboard/coachdashboard/acceptdecline" 
             />
-            <Card 
+            {/* <Card 
               title="Live Sessions" 
               description="Join and conduct coaching sessions"
               icon={<VideoCameraIcon className="w-8 h-8" />} 
               link="/dashboard/coachdashboard/livesession" 
-            />
+            /> */}
             <Card 
               title="Track Earnings" 
               description="Monitor your income and performance"

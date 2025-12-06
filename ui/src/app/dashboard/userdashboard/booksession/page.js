@@ -8,11 +8,13 @@ import { toastrSuccess, toastrError } from "@/components/ui/toaster/toaster";
 import { ArrowLeftIcon, CalendarDaysIcon, ClockIcon, CurrencyRupeeIcon } from "@heroicons/react/24/outline";
 import { getMentorProfile, getSlotsByMentor } from "@/services/mentor/mentor";
 import { bookSlot } from "@/services/booking/booking";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const BookSessionPage = () => {
   const [coach, setCoach] = useState(null);
-  const [selectedDate, setSelectedDate] = useState("");
-  const [selectedTime, setSelectedTime] = useState("");
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedSlot, setSelectedSlot] = useState(null);
   const [sessionType, setSessionType] = useState("standard");
   const [loading, setLoading] = useState(false);
   const [availableSlots, setAvailableSlots] = useState([]);
@@ -84,16 +86,25 @@ const BookSessionPage = () => {
     const fetchAvailableSlots = async () => {
       if (!selectedDate || !coachId) {
         setAvailableSlots([]);
-        setSelectedTime(""); // Clear selected time when date changes
+        setSelectedSlot(null);
         return;
       }
 
       setLoadingSlots(true);
       try {
-        console.log("Fetching slots for mentor:", coachId, "date:", selectedDate);
+        // Format date as YYYY-MM-DD
+        const formatDate = (date) => {
+          const year = date.getFullYear();
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+          const day = date.getDate().toString().padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        };
+
+        const dateString = formatDate(selectedDate);
+        console.log("Fetching slots for mentor:", coachId, "date:", dateString);
         
         const slotsResponse = await getSlotsByMentor(coachId, {
-          date: selectedDate,
+          date: dateString,
           is_booked: 0,
           is_active: 1
         });
@@ -112,25 +123,25 @@ const BookSessionPage = () => {
         // Format slots to extract time and create time slot objects
         const formattedSlots = slots.map(slot => {
           // Handle time format - could be "HH:MM:SS" or "HH:MM"
-          let startTime = '';
-          let endTime = '';
+          let startTimeStr = '';
+          let endTimeStr = '';
           
           if (slot.start_time) {
-            startTime = slot.start_time.includes(':') 
+            startTimeStr = slot.start_time.includes(':') 
               ? slot.start_time.substring(0, 5) // Get HH:MM from "HH:MM:SS"
               : slot.start_time;
           }
           
           if (slot.end_time) {
-            endTime = slot.end_time.includes(':')
+            endTimeStr = slot.end_time.includes(':')
               ? slot.end_time.substring(0, 5) // Get HH:MM from "HH:MM:SS"
               : slot.end_time;
           }
           
           return {
             id: slot.id,
-            start_time: startTime,
-            end_time: endTime,
+            start_time: startTimeStr,
+            end_time: endTimeStr,
             date: slot.date,
             slot_id: slot.id
           };
@@ -138,7 +149,7 @@ const BookSessionPage = () => {
 
         console.log("Formatted slots:", formattedSlots);
         setAvailableSlots(formattedSlots);
-        setSelectedTime(""); // Clear selected time when new slots are loaded
+        setSelectedSlot(null);
       } catch (error) {
         console.error("Error fetching available slots:", error);
         setAvailableSlots([]);
@@ -172,8 +183,8 @@ const BookSessionPage = () => {
   ];
 
   const handleBooking = async () => {
-    if (!selectedDate || !selectedTime) {
-      toastrError("Please select both date and time");
+    if (!selectedDate || !selectedSlot) {
+      toastrError("Please select both date and time slot");
       return;
     }
 
@@ -187,20 +198,11 @@ const BookSessionPage = () => {
     setLoading(true);
     
     try {
-      // Find matching slot from available slots
-      const matchingSlot = availableSlots.find(slot => slot.start_time === selectedTime);
-
-      if (!matchingSlot) {
-        toastrError("Selected slot is no longer available. Please choose another time.");
-        setLoading(false);
-        return;
-      }
-
       // Create booking
       const bookingData = {
         user_id: parseInt(userId),
         mentor_id: parseInt(coachId),
-        slot_id: matchingSlot.id,
+        slot_id: selectedSlot.id,
         notes: `Session type: ${sessionType}`
       };
 
@@ -283,7 +285,12 @@ const BookSessionPage = () => {
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">{coach.name}</h3>
                 <p className="text-[var(--primary)] font-semibold mb-3">{coach.expertise}</p>
-                <p className="text-gray-600 text-sm">{coach.bio}</p>
+                <p 
+                  className="text-gray-600 text-sm line-clamp-2 cursor-help" 
+                  title={coach.bio}
+                >
+                  {coach.bio}
+                </p>
               </div>
 
               <div className="space-y-3">
@@ -299,7 +306,7 @@ const BookSessionPage = () => {
                   <span className="font-semibold">{coach.sessions_completed}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Starting Price:</span>
+                  <span className="text-gray-600">Price(1hr):</span>
                   <span className="font-bold text-[var(--primary)]">{coach.price}</span>
                 </div>
               </div>
@@ -328,7 +335,7 @@ const BookSessionPage = () => {
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Schedule Your Session</h2>
 
               {/* Session Type */}
-              <div className="mb-6">
+              {/* <div className="mb-6">
                 <label className="block text-sm font-semibold text-gray-700 mb-3">
                   Session Type
                 </label>
@@ -349,7 +356,7 @@ const BookSessionPage = () => {
                     </div>
                   ))}
                 </div>
-              </div>
+              </div> */}
 
               {/* Date Selection */}
               <div className="mb-6">
@@ -357,68 +364,66 @@ const BookSessionPage = () => {
                   <CalendarDaysIcon className="w-4 h-4 inline mr-1" />
                   Select Date
                 </label>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                  className="input-professional"
+                <DatePicker
+                  selected={selectedDate}
+                  onChange={(date) => setSelectedDate(date)}
+                  minDate={new Date()}
+                  dateFormat="MMMM dd, yyyy"
+                  className="input-professional w-full"
+                  placeholderText="Select a date"
                 />
               </div>
 
-              {/* Time Selection */}
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  <ClockIcon className="w-4 h-4 inline mr-1" />
-                  Select Time {!selectedDate && <span className="text-gray-400 text-xs">(Select a date first)</span>}
-                </label>
-                {loadingSlots ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="spinner mr-2"></div>
-                    <span className="text-gray-600">Loading available slots...</span>
-                  </div>
-                ) : availableSlots.length > 0 ? (
-                  <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-                    {availableSlots.map((slot) => (
-                      <button
-                        key={slot.id}
-                        className={`p-3 text-sm rounded-lg border transition-all ${
-                          selectedTime === slot.start_time
-                            ? 'border-[var(--primary)] bg-blue-50 text-[var(--primary)] font-semibold'
-                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                        }`}
-                        onClick={() => setSelectedTime(slot.start_time)}
-                      >
-                        {slot.start_time}
-                        {slot.end_time && (
-                          <span className="block text-xs text-gray-500 mt-1">
-                            - {slot.end_time}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                ) : selectedDate ? (
-                  <div className="p-6 text-center bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="text-gray-600 mb-2">No available slots for this date</p>
-                    <p className="text-sm text-gray-500">Please select another date or contact the coach</p>
-                  </div>
-                ) : (
-                  <div className="p-6 text-center bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="text-gray-600">Please select a date to see available time slots</p>
-                  </div>
-                )}
-              </div>
+              {/* Time Selection - Available Slots in One Line */}
+              {selectedDate && (
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    <ClockIcon className="w-4 h-4 inline mr-1" />
+                    Select Time Slot {!selectedDate && <span className="text-gray-400 text-xs">(Select a date first)</span>}
+                  </label>
+                  {loadingSlots ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="spinner mr-2"></div>
+                      <span className="text-gray-600">Loading available slots...</span>
+                    </div>
+                  ) : availableSlots.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
+                      {availableSlots.map((slot) => (
+                        <button
+                          key={slot.id}
+                          className={`px-4 py-3 text-sm rounded-lg border transition-all whitespace-nowrap flex-shrink-0 ${
+                            selectedSlot?.id === slot.id
+                              ? 'border-[var(--primary)] bg-blue-50 text-[var(--primary)] font-semibold'
+                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                          }`}
+                          onClick={() => setSelectedSlot(slot)}
+                        >
+                          {slot.start_time} - {slot.end_time}
+                        </button>
+                      ))}
+                    </div>
+                  ) : selectedDate ? (
+                    <div className="p-6 text-center bg-gray-50 rounded-lg border border-gray-200">
+                      <p className="text-gray-600 mb-2">No available slots for this date</p>
+                      <p className="text-sm text-gray-500">Please select another date or contact the coach</p>
+                    </div>
+                  ) : (
+                    <div className="p-6 text-center bg-gray-50 rounded-lg border border-gray-200">
+                      <p className="text-gray-600">Please select a date to see available time slots</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Booking Summary */}
-              {selectedDate && selectedTime && (
+              {selectedDate && selectedSlot && (
                 <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                   <h3 className="font-semibold text-gray-900 mb-2">Booking Summary</h3>
                   <div className="space-y-1 text-sm">
                     <p><span className="text-gray-600">Coach:</span> {coach.name}</p>
                     <p><span className="text-gray-600">Session:</span> {sessionTypes.find(t => t.id === sessionType)?.name}</p>
-                    <p><span className="text-gray-600">Date:</span> {selectedDate}</p>
-                    <p><span className="text-gray-600">Time:</span> {selectedTime}</p>
+                    <p><span className="text-gray-600">Date:</span> {selectedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    <p><span className="text-gray-600">Time:</span> {selectedSlot.start_time} - {selectedSlot.end_time}</p>
                     <p><span className="text-gray-600">Duration:</span> {sessionTypes.find(t => t.id === sessionType)?.duration}</p>
                     <p className="font-semibold">
                       <span className="text-gray-600">Total:</span> 
@@ -432,7 +437,7 @@ const BookSessionPage = () => {
               {/* Book Button */}
               <button
                 onClick={handleBooking}
-                disabled={!selectedDate || !selectedTime || loading}
+                disabled={!selectedDate || !selectedSlot || loading}
                 className="btn btn-primary btn-lg w-full"
               >
                 {loading ? (
