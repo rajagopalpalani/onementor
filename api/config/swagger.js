@@ -12,10 +12,28 @@ const options = {
     servers: [
       {
         url: 'http://localhost:8001',
+        description: 'Development server',
       },
     ],
+    components: {
+      securitySchemes: {
+        sessionCookie: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: 'connect.sid',
+          description: 'Session cookie authentication',
+        },
+      },
+    },
   },
-  apis: ['./controller/*.js', './routes/*.js'],
+  // Include all JS files recursively in routes and controller directories
+  apis: [
+    './routes/**/*.js',
+    './controller/**/*.js',
+    './routes/*.js',
+    './controller/*.js',
+    './index.js',
+  ],
 };
 
 const specs = swaggerJsdoc(options);
