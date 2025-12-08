@@ -18,14 +18,13 @@ router.get("/:mentor_id", async (req, res) => {
         b.session_end_time,
         b.amount,
         b.created_at,
+        b.slots,
         u.id as user_id,
         u.name AS user_name,
         u.email AS user_email,
-        u.phone AS user_phone,
-        ms.id as slot_id
+        u.phone AS user_phone
       FROM bookings b
       JOIN users u ON b.user_id = u.id
-      JOIN mentor_slots ms ON b.slot_id = ms.id
       WHERE b.mentor_id = ?
     `;
     const params = [mentor_id];
@@ -38,7 +37,44 @@ router.get("/:mentor_id", async (req, res) => {
     query += " ORDER BY b.created_at DESC LIMIT 1000";
 
     const [rows] = await db.query(query, params);
-    res.json(rows);
+    
+    // Parse slots JSON and enrich with slot details
+    const formattedRows = await Promise.all(rows.map(async (row) => {
+      // Parse slots JSON array
+      let slotIds = [];
+      if (row.slots) {
+        if (typeof row.slots === 'string') {
+          try {
+            slotIds = JSON.parse(row.slots);
+          } catch (e) {
+            slotIds = [];
+          }
+        } else if (Array.isArray(row.slots)) {
+          slotIds = row.slots;
+        }
+      }
+
+      // Get slot details for all slot IDs
+      let slotsDetails = [];
+      if (slotIds.length > 0) {
+        const placeholders = slotIds.map(() => '?').join(',');
+        const [slots] = await db.query(
+          `SELECT id, date, start_time, end_time, is_booked, is_active 
+           FROM mentor_slots 
+           WHERE id IN (${placeholders})`,
+          slotIds
+        );
+        slotsDetails = slots;
+      }
+
+      return {
+        ...row,
+        slot_ids: slotIds,
+        slots: slotsDetails
+      };
+    }));
+    
+    res.json(formattedRows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Database error" });

@@ -5,7 +5,35 @@ const { findUserByEmail, verifyPassword, updateUserVerification } = require('../
 const pool = require('../config/mysql');
 const jwt = require('jsonwebtoken');
 
-// Send OTP for login or verification
+/**
+ * @swagger
+ * /api/auth/send-otp:
+ *   post:
+ *     summary: Send OTP to user email
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: User email address
+ *     responses:
+ *       200:
+ *         description: OTP sent successfully
+ *       400:
+ *         description: Email required
+ *       404:
+ *         description: Email not registered
+ *       500:
+ *         description: Server error
+ */
 router.post('/send-otp', async (req, res) => {
   try {
     const { email } = req.body;
@@ -27,7 +55,38 @@ router.post('/send-otp', async (req, res) => {
   }
 });
 
-// Login with email and password
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Login with email and password
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 format: password
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *       401:
+ *         description: Invalid credentials
+ *       403:
+ *         description: Account deactivated or not verified
+ *       500:
+ *         description: Server error
+ */
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;

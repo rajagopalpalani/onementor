@@ -5,49 +5,210 @@ const db = require('../config/mysql');
 // JUSPAY Configuration
 const JUSPAY_MERCHANT_ID = process.env.JUSPAY_MERCHANT_ID || 'ONEMENTOR';
 const JUSPAY_API_KEY = process.env.JUSPAY_API_KEY || '770CA820CB74397AD51087EC5CA9F0';
+const JUSPAY_CLIENT_ID = process.env.JUSPAY_CLIENT_ID || '';
 const JUSPAY_BASE_URL = process.env.JUSPAY_BASE_URL || 'https://api.juspay.in';
+const JUSPAY_SANDBOX_URL = process.env.JUSPAY_SANDBOX_URL || 'https://sandbox.juspay.in';
 const JUSPAY_RETURN_URL = process.env.JUSPAY_RETURN_URL || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/callback`;
+const JUSPAY_PAYOUT_BASE_URL = process.env.JUSPAY_PAYOUT_BASE_URL || JUSPAY_SANDBOX_URL; // Use sandbox for payout API
 
 /**
- * Generate HMAC signature for JUSPAY requests
+ * Validate VPA (UPI ID) using JUSPAY payout API
+ * @param {Object} vpaData - VPA validation details
+ * @param {string} vpaData.vpa - UPI VPA ID (e.g., "name@upi")
+ * @param {string} vpaData.name - Account holder name
+ * @param {string} vpaData.email - Mentor email
+ * @param {string} vpaData.phone - Mentor phone
+ * @param {string} vpaData.customerId - Customer ID (optional, will be generated if not provided)
+ * @param {string} vpaData.beneId - Beneficiary ID (optional, for existing beneficiary)
  */
-function generateJuspaySignature(params, apiKey) {
-  const sortedKeys = Object.keys(params).sort();
-  const queryString = sortedKeys
-    .map(key => `${key}=${encodeURIComponent(params[key])}`)
-    .join('&');
-  return crypto
-    .createHmac('sha256', apiKey)
-    .update(queryString)
-    .digest('hex');
+async function validateVPA(vpaData) {
+  try {
+    const {
+      vpa,
+      name,
+      email,
+      phone,
+      customerId,
+      beneId
+    } = vpaData;
+
+    if (!vpa || !email || !phone) {
+      return {
+        success: false,
+        error: 'VPA, email, and phone are required'
+      };
+    }
+
+    // Format phone number
+    let formattedPhone = phone.replace(/[-\s]/g, '');
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = '+' + formattedPhone;
+    }
+
+    // Prepare request payload
+    const payload = {
+      command: 'VALIDATE',
+      customerId: customerId || `customer_${Date.now()}`,
+      email: email,
+      phone: formattedPhone,
+      beneDetails: {
+        details: {
+          name: name || email.split('@')[0],
+          vpa: vpa
+        },
+        type: 'UPI_ID'
+      }
+    };
+
+    // If beneId is provided, include it
+    if (beneId) {
+      payload.beneId = beneId;
+    }
+
+    // Make API call to JUSPAY payout API
+    // Basic Auth format: Username = API Key, Password = Empty string
+    const authHeader = `Basic ${Buffer.from(`${JUSPAY_API_KEY}:`).toString('base64')}`;
+    
+    const response = await axios.post(
+      `${JUSPAY_PAYOUT_BASE_URL}/payout/merchant/v2/benedetails`,
+      payload,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-merchantId': JUSPAY_MERCHANT_ID,
+          'Authorization': authHeader
+        }
+      }
+    );
+
+    if (response.data && response.data.status === 'VALID') {
+      return {
+        success: true,
+        status: 'valid',
+        uniqueId: response.data.uniqueId || response.data.beneId,
+        beneId: response.data.uniqueId || response.data.beneId,
+        nameAtBank: response.data.nameAtBank,
+        responseCode: response.data.responseCode,
+        responseMessage: response.data.responseMessage,
+        validationType: response.data.validationType,
+        beneDetails: response.data.beneDetails,
+        responseData: response.data
+      };
+    } else {
+      return {
+        success: false,
+        status: response.data?.status || 'invalid',
+        error: response.data?.responseMessage || 'VPA validation failed',
+        responseCode: response.data?.responseCode,
+        responseData: response.data
+      };
+    }
+  } catch (error) {
+    console.error('JUSPAY VPA Validation Error:', error.response?.data || error.message);
+    return {
+      success: false,
+      error: error.response?.data?.responseMessage || error.message || 'VPA validation failed',
+      responseData: error.response?.data
+    };
+  }
 }
 
 /**
- * Create a payment order with JUSPAY
- * @param {Object} paymentData - Payment details
- * @param {number} paymentData.amount - Amount (e.g., 10.00 for INR)
- * @param {string} paymentData.currency - Currency code (INR, USD, etc.)
- * @param {string} paymentData.order_id - Unique order ID
- * @param {string} paymentData.customer_email - Customer email
- * @param {string} paymentData.customer_name - Customer name
- * @param {string} paymentData.customer_phone - Customer phone (with country code)
- * @param {string} paymentData.return_url - Return URL after payment
- * @param {Object} paymentData.metadata - Additional metadata
+ * Get beneficiary details and status from JUSPAY
+ * @param {string} customerId - Customer ID
+ * @param {string} beneId - Beneficiary ID
  */
-async function createPaymentOrder(paymentData) {
+async function getBeneficiaryStatus(customerId, beneId) {
   try {
-    const { 
-      amount, 
-      currency, 
-      order_id, 
-      customer_email, 
-      customer_name, 
-      customer_phone,
-      metadata 
-    } = paymentData;
+    if (!customerId || !beneId) {
+      return {
+        success: false,
+        error: 'customerId and beneId are required'
+      };
+    }
 
-    // Format phone number (JUSPAY expects format: country_code + number)
-    let formattedPhone = customer_phone || '';
+    // Basic Auth format: Username = API Key, Password = Empty string
+    const authHeader = `Basic ${Buffer.from(`${JUSPAY_API_KEY}:`).toString('base64')}`;
+
+    // Make API call to JUSPAY payout API
+    const response = await axios.get(
+      `${JUSPAY_PAYOUT_BASE_URL}/payout/merchant/v2/benedetails/${customerId}/${beneId}`,
+      {
+        headers: {
+          'x-merchantid': JUSPAY_MERCHANT_ID,
+          'Authorization': authHeader
+        }
+      }
+    );
+
+    if (response.data) {
+      return {
+        success: true,
+        status: response.data.status,
+        uniqueId: response.data.uniqueId || beneId,
+        beneDetails: response.data.beneDetails,
+        nameAtBank: response.data.nameAtBank,
+        responseCode: response.data.responseCode,
+        responseMessage: response.data.responseMessage,
+        validationType: response.data.validationType,
+        createdAt: response.data.createdAt,
+        updatedAt: response.data.updatedAt,
+        transactions: response.data.transactions || [],
+        responseData: response.data
+      };
+    } else {
+      return {
+        success: false,
+        error: 'No data received from JUSPAY',
+        responseData: response.data
+      };
+    }
+  } catch (error) {
+    console.error('JUSPAY Get Beneficiary Status Error:', error.response?.data || error.message);
+    return {
+      success: false,
+      error: error.response?.data?.responseMessage || error.message || 'Failed to get beneficiary status',
+      responseData: error.response?.data
+    };
+  }
+}
+
+/**
+ * Create payout order using JUSPAY payout API
+ * @param {Object} payoutData - Payout order details
+ * @param {string} payoutData.orderId - Unique order ID
+ * @param {string} payoutData.customerId - Customer ID
+ * @param {string} payoutData.customerEmail - Customer email
+ * @param {string} payoutData.customerPhone - Customer phone
+ * @param {number} payoutData.amount - Total payout amount
+ * @param {string} payoutData.beneficiaryId - Beneficiary ID (beneId) to receive payout
+ * @param {string} payoutData.beneficiaryName - Beneficiary name
+ * @param {string} payoutData.routingId - Optional routing ID for customer grouping
+ * @param {string} payoutData.remark - Optional remark/note for the transaction
+ */
+async function createPayoutOrder(payoutData) {
+  try {
+    const {
+      orderId,
+      customerId,
+      customerEmail,
+      customerPhone,
+      amount,
+      beneficiaryId,
+      beneficiaryName,
+      routingId,
+      remark
+    } = payoutData;
+
+    if (!orderId || !customerId || !amount || !beneficiaryId) {
+      return {
+        success: false,
+        error: 'orderId, customerId, amount, and beneficiaryId are required'
+      };
+    }
+
+    // Format phone number
+    let formattedPhone = customerPhone || '';
     if (formattedPhone) {
       formattedPhone = formattedPhone.replace(/[-\s]/g, '');
       if (!formattedPhone.startsWith('+')) {
@@ -55,318 +216,417 @@ async function createPaymentOrder(paymentData) {
       }
     }
 
-    // Prepare order parameters
-    const orderParams = {
-      order_id: order_id,
-      amount: (parseFloat(amount) * 100).toString(), // Convert to paise (smallest currency unit)
-      currency: currency || 'INR',
-      customer_id: customer_email, // Use email as customer ID
-      customer_email: customer_email,
-      customer_phone: formattedPhone,
-      customer_first_name: customer_name?.split(' ')[0] || customer_name,
-      customer_last_name: customer_name?.split(' ').slice(1).join(' ') || '',
-      return_url: JUSPAY_RETURN_URL,
-      ...(metadata && { metadata: JSON.stringify(metadata) })
+    // Prepare request payload
+    const payload = {
+      orderId: orderId,
+      customerId: customerId,
+      customerEmail: customerEmail || '',
+      customerPhone: formattedPhone || '',
+      amount: parseFloat(amount).toFixed(2), // Ensure 2 decimal places
+      type: 'FULFILL_ONLY',
+      fulfillments: [
+        {
+          amount: parseFloat(amount).toFixed(2),
+          beneficiaryDetails: {
+            details: {
+              name: beneficiaryName || 'Beneficiary',
+              id: beneficiaryId
+            },
+            type: 'BENE_ID'
+          }
+        }
+      ]
     };
 
-    // Generate signature
-    const signature = generateJuspaySignature(orderParams, JUSPAY_API_KEY);
-    orderParams.signature = signature;
+    // Add optional remark
+    if (remark) {
+      payload.fulfillments[0].additionalInfo = {
+        remark: remark
+      };
+    }
 
-    // Convert params to URL-encoded string for JUSPAY
-    const formData = new URLSearchParams();
-    Object.keys(orderParams).forEach(key => {
-      formData.append(key, orderParams[key]);
-    });
+    // Basic Auth format: Username = API Key, Password = Empty string
+    const authHeader = `Basic ${Buffer.from(`${JUSPAY_API_KEY}:`).toString('base64')}`;
 
-    // Make API call to JUSPAY
+    // Prepare headers
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-merchantid': JUSPAY_MERCHANT_ID,
+      'Authorization': authHeader
+    };
+
+    // Add routing ID if provided
+    if (routingId) {
+      headers['x-routing-id'] = routingId;
+    }
+
+    // Make API call to JUSPAY payout API
     const response = await axios.post(
-      `${JUSPAY_BASE_URL}/orders`,
-      formData.toString(),
+      `${JUSPAY_PAYOUT_BASE_URL}/payout/merchant/v1/orders`,
+      payload,
       {
-        headers: {
-          'Authorization': `Basic ${Buffer.from(`${JUSPAY_MERCHANT_ID}:${JUSPAY_API_KEY}`).toString('base64')}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'x-merchant-id': JUSPAY_MERCHANT_ID
-        }
+        headers: headers
       }
     );
 
-    if (response.data && response.data.status === 'CREATED') {
+    if (response.data && response.data.orderId) {
       return {
         success: true,
-        payment_id: response.data.order_id || order_id,
-        payment_url: response.data.payment_url || response.data.payment_links?.web || '',
-        order_id: response.data.order_id || order_id,
-        order_data: response.data
+        orderId: response.data.orderId,
+        status: response.data.status,
+        amount: response.data.amount,
+        fulfillments: response.data.fulfillments || [],
+        payments: response.data.payments || [],
+        responseData: response.data
       };
     } else {
       return {
         success: false,
-        error: response.data?.error_message || 'Payment order creation failed'
+        error: 'Failed to create payout order',
+        responseData: response.data
       };
     }
   } catch (error) {
-    console.error('JUSPAY Error:', error.response?.data || error.message);
+    console.error('JUSPAY Create Payout Order Error:', error.response?.data || error.message);
     return {
       success: false,
-      error: error.response?.data?.error_message || error.message || 'Payment order creation failed'
+      error: error.response?.data?.error_message || error.response?.data?.message || error.message || 'Failed to create payout order',
+      responseData: error.response?.data
     };
   }
 }
 
 /**
- * Get transaction details of an order from JUSPAY
- * @param {string} order_id - Order ID from JUSPAY
+ * Create payment session for user to make payment
+ * @param {Object} sessionData - Payment session details
+ * @param {string} sessionData.order_id - Order ID (usually booking payout_order_id)
+ * @param {string} sessionData.amount - Payment amount
+ * @param {string} sessionData.customer_id - Customer ID
+ * @param {string} sessionData.customer_email - Customer email
+ * @param {string} sessionData.customer_phone - Customer phone
+ * @param {string} sessionData.first_name - Customer first name
+ * @param {string} sessionData.last_name - Customer last name
+ * @param {string} sessionData.description - Payment description
+ * @param {string} sessionData.return_url - Return URL after payment
+ * @param {string} sessionData.payment_page_client_id - Payment page client ID
+ * @param {Object} sessionData.metadata - Additional metadata
  */
-async function verifyPayment(order_id) {
-  try {
-    // Prepare verification parameters
-    const verifyParams = {
-      order_id: order_id
-    };
-
-    // Generate signature
-    const signature = generateJuspaySignature(verifyParams, JUSPAY_API_KEY);
-    verifyParams.signature = signature;
-
-    // Convert params to query string
-    const queryString = new URLSearchParams(verifyParams).toString();
-
-    // Make API call to JUSPAY
-    const response = await axios.get(
-      `${JUSPAY_BASE_URL}/orders/${order_id}?${queryString}`,
-      {
-        headers: {
-          'Authorization': `Basic ${Buffer.from(`${JUSPAY_MERCHANT_ID}:${JUSPAY_API_KEY}`).toString('base64')}`,
-          'x-merchant-id': JUSPAY_MERCHANT_ID
-        }
-      }
-    );
-
-    if (response.data) {
-      const orderData = response.data;
-      
-      // Map JUSPAY status to our internal status
-      let status = 'pending';
-      if (orderData.status === 'CHARGED' || orderData.status === 'SUCCESS') {
-        status = 'completed';
-      } else if (orderData.status === 'FAILED' || orderData.status === 'CANCELLED') {
-        status = 'failed';
-      } else if (orderData.status === 'REFUNDED') {
-        status = 'refunded';
-      }
-
-      return {
-        success: true,
-        status: status,
-        payment_data: orderData,
-        transaction_id: orderData.txn_id || orderData.order_id,
-        amount: orderData.amount ? (parseFloat(orderData.amount) / 100).toString() : '0',
-        currency: orderData.currency || 'INR'
-      };
-    } else {
-      return {
-        success: false,
-        error: 'Payment verification failed - no data received'
-      };
-    }
-  } catch (error) {
-    console.error('JUSPAY Verification Error:', error.response?.data || error.message);
-    return {
-      success: false,
-      error: error.response?.data?.error_message || error.message || 'Payment verification failed'
-    };
-  }
-}
-
-/**
- * Save payment record to database
- * @param {Object} paymentData - Payment data
- */
-async function savePayment(paymentData) {
-  const conn = await db.getConnection();
+async function createPaymentSession(sessionData) {
   try {
     const {
-      booking_id,
-      user_id,
-      mentor_id,
+      order_id,
       amount,
-      currency,
-      payment_method,
-      transaction_id,
-      status,
-      metadata
-    } = paymentData;
+      customer_id,
+      customer_email,
+      customer_phone,
+      first_name,
+      last_name,
+      description,
+      return_url,
+      payment_page_client_id,
+      metadata = {},
+      theme = 'dark',
+      action = 'paymentPage'
+    } = sessionData;
 
-    const [result] = await conn.query(
-      `INSERT INTO payments (
-        booking_id, user_id, mentor_id, amount, currency, 
-        payment_method, transaction_id, status, metadata
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    if (!order_id || !amount || !customer_id || !customer_email || !customer_phone) {
+      return {
+        success: false,
+        error: 'order_id, amount, customer_id, customer_email, and customer_phone are required'
+      };
+    }
+
+    // Prepare request payload
+    const payload = {
+      order_id,
+      amount: amount.toString(),
+      customer_id,
+      customer_email,
+      customer_phone,
+      payment_page_client_id: payment_page_client_id || JUSPAY_CLIENT_ID,
+      action,
+      return_url: return_url || JUSPAY_RETURN_URL,
+      description: description || 'Complete your payment',
+      theme
+    };
+
+    // Add optional fields
+    if (first_name) payload.first_name = first_name;
+    if (last_name) payload.last_name = last_name;
+
+    // Add metadata if provided
+    if (metadata && Object.keys(metadata).length > 0) {
+      Object.keys(metadata).forEach(key => {
+        payload[`metadata.${key}`] = metadata[key];
+      });
+    }
+
+    // Basic Auth format: Username = API Key, Password = Empty string
+    const authHeader = `Basic ${Buffer.from(`${JUSPAY_API_KEY}:`).toString('base64')}`;
+
+    // Prepare headers
+    const headers = {
+      'Authorization': authHeader,
+      'x-merchantid': JUSPAY_MERCHANT_ID,
+      'Content-Type': 'application/json'
+    };
+
+    // Make API call to JUSPAY session API
+    const response = await axios.post(
+      `${JUSPAY_BASE_URL}/session`,
+      payload,
+      {
+        headers: headers
+      }
+    );
+
+    if (response.data && response.data.id) {
+      return {
+        success: true,
+        sessionId: response.data.id,
+        orderId: response.data.order_id,
+        status: response.data.status,
+        paymentLinks: response.data.payment_links || {},
+        sdkPayload: response.data.sdk_payload || {},
+        responseData: response.data
+      };
+    } else {
+      return {
+        success: false,
+        error: 'Failed to create payment session',
+        responseData: response.data
+      };
+    }
+  } catch (error) {
+    console.error('JUSPAY Create Payment Session Error:', error.response?.data || error.message);
+    return {
+      success: false,
+      error: error.response?.data?.error_message || error.response?.data?.message || error.message || 'Failed to create payment session',
+      responseData: error.response?.data
+    };
+  }
+}
+
+/**
+ * Verify JUSPAY webhook signature
+ * @param {string} payload - Raw request body as string
+ * @param {string} signature - HMAC signature from x-juspay-signature header
+ * @returns {boolean} - True if signature is valid
+ */
+function verifyWebhookSignature(payload, signature) {
+  try {
+    if (!signature || !payload) {
+      return false;
+    }
+
+    // JUSPAY uses HMAC SHA256 with API key as secret
+    const hmac = crypto.createHmac('sha256', JUSPAY_API_KEY);
+    hmac.update(payload);
+    const calculatedSignature = hmac.digest('hex');
+
+    // Compare signatures (use constant-time comparison to prevent timing attacks)
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(calculatedSignature)
+    );
+  } catch (error) {
+    console.error('Webhook signature verification error:', error);
+    return false;
+  }
+}
+
+/**
+ * Handle JUSPAY webhook for payment status updates
+ * Supports both event-based webhooks (with event_name and content.order) and direct order webhooks
+ * @param {Object} webhookData - Webhook payload from JUSPAY
+ * @returns {Object} - Result of webhook processing
+ */
+async function handleWebhook(webhookData) {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // Handle event-based webhook structure (ORDER_SUCCEEDED, ORDER_FAILED, etc.)
+    let orderData = null;
+    let eventName = null;
+
+    if (webhookData.event_name && webhookData.content && webhookData.content.order) {
+      // Event-based webhook structure
+      eventName = webhookData.event_name;
+      orderData = webhookData.content.order;
+      console.log(`Processing webhook event: ${eventName}`);
+    } else if (webhookData.order || webhookData.order_id || webhookData.id) {
+      // Direct order webhook structure (backward compatibility)
+      orderData = webhookData.order || webhookData;
+      console.log('Processing direct order webhook');
+    } else {
+      await connection.rollback();
+      return {
+        success: false,
+        error: 'Invalid webhook payload structure. Expected event_name with content.order or order data directly.'
+      };
+    }
+
+    // Extract order_id from order data (could be in different fields)
+    const orderId = orderData.order_id || orderData.id || webhookData.order_id || webhookData.id;
+    const status = orderData.status || webhookData.status;
+    const paymentStatus = orderData.payment_status || status;
+    const txnId = orderData.txn_id || orderData.txn_detail?.txn_id;
+    const amount = orderData.amount || orderData.effective_amount;
+    const currency = orderData.currency || 'INR';
+
+    if (!orderId) {
+      await connection.rollback();
+      return {
+        success: false,
+        error: 'order_id not found in webhook payload'
+      };
+    }
+
+    console.log(`Processing webhook for order_id: ${orderId}, status: ${status}`);
+
+    // Find booking by payout_order_id
+    const [bookings] = await connection.query(
+      `SELECT id, user_id, mentor_id, slots, payment_status, status, payout_order_id, amount
+       FROM bookings
+       WHERE payout_order_id = ?`,
+      [orderId]
+    );
+
+    if (bookings.length === 0) {
+      await connection.rollback();
+      console.log(`Booking not found for order_id: ${orderId}`);
+      return {
+        success: false,
+        error: 'Booking not found for this order_id',
+        order_id: orderId
+      };
+    }
+
+    const booking = bookings[0];
+
+    // Check if already processed (idempotency check)
+    if (booking.payment_status === 'paid' && (status === 'CHARGED' || eventName === 'ORDER_SUCCEEDED')) {
+      await connection.rollback();
+      return {
+        success: true,
+        message: 'Payment already processed',
+        booking_id: booking.id,
+        payment_status: booking.payment_status,
+        booking_status: booking.status
+      };
+    }
+
+    // Map JUSPAY status to internal payment status
+    let newPaymentStatus = booking.payment_status;
+    let newBookingStatus = booking.status;
+
+    // Handle different event types and statuses
+    if (eventName === 'ORDER_SUCCEEDED' || status === 'CHARGED' || status === 'SUCCESS' || paymentStatus === 'CHARGED') {
+      newPaymentStatus = 'paid';
+      newBookingStatus = 'confirmed';
+    } else if (eventName === 'ORDER_FAILED' || status === 'FAILED' || paymentStatus === 'FAILED') {
+      newPaymentStatus = 'failed';
+      newBookingStatus = 'cancelled';
+    } else if (eventName === 'ORDER_CANCELLED' || status === 'CANCELLED') {
+      newPaymentStatus = 'failed';
+      newBookingStatus = 'cancelled';
+    } else if (eventName === 'ORDER_REFUNDED' || status === 'REFUNDED' || paymentStatus === 'REFUNDED') {
+      newPaymentStatus = 'refunded';
+      newBookingStatus = 'cancelled';
+    } else if (status === 'PENDING' || status === 'NEW') {
+      // Keep current status for pending orders
+      newPaymentStatus = booking.payment_status;
+      newBookingStatus = booking.status;
+    }
+
+    // Prepare webhook data to store (store full webhook payload)
+    const webhookPayload = {
+      event_name: eventName,
+      date_created: webhookData.date_created,
+      order_data: orderData,
+      full_payload: webhookData
+    };
+
+    // Update booking status
+    await connection.query(
+      `UPDATE bookings 
+       SET payment_status = ?,
+           status = ?,
+           payout_order_status = ?,
+           payout_order_data = JSON_MERGE_PATCH(COALESCE(payout_order_data, '{}'), ?),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
       [
-        booking_id,
-        user_id,
-        mentor_id,
-        amount,
-        currency || 'INR',
-        payment_method || 'juspay',
-        transaction_id,
-        status || 'pending',
-        metadata ? JSON.stringify(metadata) : null
+        newPaymentStatus,
+        newBookingStatus,
+        status || eventName,
+        JSON.stringify(webhookPayload),
+        booking.id
       ]
     );
 
-    return result.insertId;
-  } catch (error) {
-    console.error('Error saving payment:', error);
-    throw error;
-  } finally {
-    conn.release();
-  }
-}
-
-/**
- * Update payment status in database
- * @param {string} transaction_id - Transaction ID
- * @param {string} status - Payment status
- * @param {Object} payment_data - Additional payment data
- */
-async function updatePaymentStatus(transaction_id, status, payment_data = {}) {
-  const conn = await db.getConnection();
-  try {
-    const updateFields = ['status = ?'];
-    const updateValues = [status];
-
-    if (payment_data.payment_date) {
-      updateFields.push('payment_date = ?');
-      updateValues.push(payment_data.payment_date);
-    }
-
-    if (payment_data.refund_amount) {
-      updateFields.push('refund_amount = ?');
-      updateValues.push(payment_data.refund_amount);
-    }
-
-    if (payment_data.refund_date) {
-      updateFields.push('refund_date = ?');
-      updateValues.push(payment_data.refund_date);
-    }
-
-    updateValues.push(transaction_id);
-
-    await conn.query(
-      `UPDATE payments SET ${updateFields.join(', ')}, updated_at = NOW() WHERE transaction_id = ?`,
-      updateValues
-    );
-
-    // Also update booking payment status
-    const [payment] = await conn.query(
-      `SELECT booking_id FROM payments WHERE transaction_id = ?`,
-      [transaction_id]
-    );
-
-    if (payment.length > 0) {
-      const paymentStatusMap = {
-        'completed': 'paid',
-        'failed': 'failed',
-        'refunded': 'refunded'
-      };
-
-      await conn.query(
-        `UPDATE bookings SET payment_status = ? WHERE id = ?`,
-        [paymentStatusMap[status] || 'pending', payment[0].booking_id]
-      );
-    }
-  } catch (error) {
-    console.error('Error updating payment status:', error);
-    throw error;
-  } finally {
-    conn.release();
-  }
-}
-
-/**
- * Handle JUSPAY webhook
- * @param {Object} webhookData - Webhook payload from JUSPAY
- */
-async function handleWebhook(webhookData) {
-  try {
-    const { order_id, status, txn_id, event, payment_status } = webhookData;
-
-    // JUSPAY webhook format
-    const orderId = order_id || webhookData.order_id;
-    const transId = txn_id || webhookData.txn_id;
-    const paymentStatus = status || payment_status || event;
-
-    if (!orderId && !transId) {
-      return { success: false, error: 'Missing order_id or txn_id in webhook' };
-    }
-
-    // Map JUSPAY status to our internal status
-    let internalStatus = 'pending';
-    if (paymentStatus === 'CHARGED' || paymentStatus === 'SUCCESS' || paymentStatus === 'charged') {
-      internalStatus = 'completed';
-    } else if (paymentStatus === 'FAILED' || paymentStatus === 'CANCELLED' || paymentStatus === 'failed') {
-      internalStatus = 'failed';
-    } else if (paymentStatus === 'REFUNDED' || paymentStatus === 'refunded') {
-      internalStatus = 'refunded';
-    }
-
-    // Find payment by order_id or transaction_id
-    const conn = await db.getConnection();
-    try {
-      let payment;
-      if (transId) {
-        const [payments] = await conn.query(
-          "SELECT transaction_id FROM payments WHERE transaction_id = ?",
-          [transId]
-        );
-        if (payments.length > 0) {
-          payment = payments[0];
-        }
-      }
-
-      if (!payment && orderId) {
-        // Try to find by order_id in metadata
-        const [payments] = await conn.query(
-          "SELECT transaction_id FROM payments WHERE JSON_EXTRACT(metadata, '$.order_id') = ?",
-          [orderId]
-        );
-        if (payments.length > 0) {
-          payment = payments[0];
-        }
-      }
-
-      if (payment) {
-        await updatePaymentStatus(
-          payment.transaction_id,
-          internalStatus,
-          {
-            payment_date: internalStatus === 'completed' ? new Date() : undefined,
-            refund_amount: internalStatus === 'refunded' ? webhookData.refund_amount : undefined,
-            refund_date: internalStatus === 'refunded' ? new Date() : undefined
+    // Only mark slots as booked if payment is successful
+    if (newPaymentStatus === 'paid' && newBookingStatus === 'confirmed') {
+      // Parse slots JSON array
+      let slotIds = [];
+      if (booking.slots) {
+        if (typeof booking.slots === 'string') {
+          try {
+            slotIds = JSON.parse(booking.slots);
+          } catch (e) {
+            console.error('Error parsing slots JSON:', e);
+            slotIds = [];
           }
-        );
-      } else {
-        console.warn('Payment not found for webhook:', { orderId, transId });
+        } else if (Array.isArray(booking.slots)) {
+          slotIds = booking.slots;
+        }
       }
-    } finally {
-      conn.release();
+
+      // Mark all slots as booked
+      if (slotIds.length > 0) {
+        const placeholders = slotIds.map(() => '?').join(',');
+        const [updateResult] = await connection.query(
+          `UPDATE mentor_slots 
+           SET is_booked = 1, updated_at = CURRENT_TIMESTAMP
+           WHERE id IN (${placeholders}) AND is_booked = 0`,
+          slotIds
+        );
+        console.log(`Marked ${updateResult.affectedRows} slot(s) as booked`);
+      }
     }
 
-    return { success: true };
+    await connection.commit();
+
+    return {
+      success: true,
+      message: 'Webhook processed successfully',
+      booking_id: booking.id,
+      order_id: orderId,
+      event_name: eventName,
+      payment_status: newPaymentStatus,
+      booking_status: newBookingStatus,
+      txn_id: txnId,
+      amount: amount
+    };
   } catch (error) {
-    console.error('Webhook handling error:', error);
-    return { success: false, error: error.message };
+    await connection.rollback();
+    console.error('Webhook processing error:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to process webhook',
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    };
+  } finally {
+    connection.release();
   }
 }
 
 module.exports = {
-  createPaymentOrder,
-  verifyPayment,
-  savePayment,
-  updatePaymentStatus,
-  handleWebhook
+  validateVPA,
+  getBeneficiaryStatus,
+  createPayoutOrder,
+  createPaymentSession,
+  handleWebhook,
+  verifyWebhookSignature
 };
-
