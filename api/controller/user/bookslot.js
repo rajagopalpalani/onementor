@@ -73,15 +73,15 @@ exports.bookSlot = async (req, res) => {
       return res.status(400).json({ error: "Slot was booked by another user" });
     }
 
-    // Create booking
+    // Create booking with slots as JSON array
     const [bookingResult] = await connection.query(
       `INSERT INTO bookings 
-       (user_id, mentor_id, slot_id, status, session_date, session_start_time, session_end_time, amount, payment_status, notes)
+       (user_id, mentor_id, slots, status, session_date, session_start_time, session_end_time, amount, payment_status, notes)
        VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, 'pending', ?)`,
       [
         user_id,
         mentor_id,
-        slot_id,
+        JSON.stringify([slot_id]), // Store as JSON array
         slot.date,
         slot.start_time,
         slot.end_time,
@@ -160,7 +160,13 @@ exports.bookSlot = async (req, res) => {
         id: bookingId,
         user_id: user_id,
         mentor_id: mentor_id,
-        slot_id: slot_id,
+        slot_ids: [slot_id],
+        slots: [{
+          id: slot.id,
+          date: slot.date,
+          start_time: slot.start_time,
+          end_time: slot.end_time
+        }],
         session_date: slot.date,
         session_start_time: slot.start_time,
         session_end_time: slot.end_time,
@@ -214,7 +220,44 @@ exports.getUserBookings = async (req, res) => {
     query += " ORDER BY b.session_date DESC, b.session_start_time DESC";
 
     const [bookings] = await db.query(query, params);
-    res.json(bookings);
+    
+    // Parse slots JSON and enrich with slot details
+    const formattedBookings = await Promise.all(bookings.map(async (booking) => {
+      // Parse slots JSON array
+      let slotIds = [];
+      if (booking.slots) {
+        if (typeof booking.slots === 'string') {
+          try {
+            slotIds = JSON.parse(booking.slots);
+          } catch (e) {
+            slotIds = [];
+          }
+        } else if (Array.isArray(booking.slots)) {
+          slotIds = booking.slots;
+        }
+      }
+
+      // Get slot details for all slot IDs
+      let slotsDetails = [];
+      if (slotIds.length > 0) {
+        const placeholders = slotIds.map(() => '?').join(',');
+        const [slots] = await db.query(
+          `SELECT id, date, start_time, end_time, is_booked, is_active 
+           FROM mentor_slots 
+           WHERE id IN (${placeholders})`,
+          slotIds
+        );
+        slotsDetails = slots;
+      }
+
+      return {
+        ...booking,
+        slot_ids: slotIds,
+        slots: slotsDetails
+      };
+    }));
+    
+    res.json(formattedBookings);
   } catch (err) {
     console.error("Error getting bookings:", err);
     res.status(500).json({ error: "Database error" });
@@ -249,7 +292,44 @@ exports.getMentorBookings = async (req, res) => {
     query += " ORDER BY b.session_date DESC, b.session_start_time DESC";
 
     const [bookings] = await db.query(query, params);
-    res.json(bookings);
+    
+    // Parse slots JSON and enrich with slot details
+    const formattedBookings = await Promise.all(bookings.map(async (booking) => {
+      // Parse slots JSON array
+      let slotIds = [];
+      if (booking.slots) {
+        if (typeof booking.slots === 'string') {
+          try {
+            slotIds = JSON.parse(booking.slots);
+          } catch (e) {
+            slotIds = [];
+          }
+        } else if (Array.isArray(booking.slots)) {
+          slotIds = booking.slots;
+        }
+      }
+
+      // Get slot details for all slot IDs
+      let slotsDetails = [];
+      if (slotIds.length > 0) {
+        const placeholders = slotIds.map(() => '?').join(',');
+        const [slots] = await db.query(
+          `SELECT id, date, start_time, end_time, is_booked, is_active 
+           FROM mentor_slots 
+           WHERE id IN (${placeholders})`,
+          slotIds
+        );
+        slotsDetails = slots;
+      }
+
+      return {
+        ...booking,
+        slot_ids: slotIds,
+        slots: slotsDetails
+      };
+    }));
+    
+    res.json(formattedBookings);
   } catch (err) {
     console.error("Error getting bookings:", err);
     res.status(500).json({ error: "Database error" });

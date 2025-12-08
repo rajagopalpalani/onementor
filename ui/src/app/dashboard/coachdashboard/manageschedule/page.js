@@ -41,29 +41,29 @@ const SchedulePage = () => {
   }, []);
 
   // Fetch slots for this mentor
-  const fetchSlots = async () => {
-    if (!coachId) return;
+    const fetchSlots = async () => {
+      if (!coachId) return;
     setIsRefreshing(true);
-    try {
-      const res = await fetch(
+      try {
+        const res = await fetch(
         `http://localhost:8001/api/mentor/slots/mentor/${coachId}`,
         { credentials: "include" }
-      );
+        );
       if (!res.ok) throw new Error("Failed to fetch slots");
-      const data = await res.json();
+        const data = await res.json();
       setSlots(data || []);
-    } catch (err) {
+      } catch (err) {
       console.error("Error fetching slots:", err);
       toastrError("Failed to load slots. Please refresh the page.");
     } finally {
       setLoading(false);
       setIsRefreshing(false);
-    }
-  };
+      }
+    };
 
   useEffect(() => {
     if (coachId) {
-      fetchSlots();
+    fetchSlots();
     }
   }, [coachId]);
 
@@ -118,14 +118,14 @@ const SchedulePage = () => {
       } else {
         // Create new slot
         const res = await fetch("http://localhost:8001/api/mentor/slots", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
             ...slotData,
             mentor_id: coachId,
           }),
-        });
+      });
         
         if (!res.ok) {
           const error = await res.json();
@@ -231,13 +231,13 @@ const SchedulePage = () => {
       <main className="flex-grow w-full container-professional py-12 md:py-16 lg:py-20 fade-in">
         {/* Header Section */}
         <div className="mb-8">
-          <button
-            onClick={handleBack}
+        <button
+          onClick={handleBack}
             className="flex items-center gap-2 text-gray-600 hover:text-gray-800 mb-6 transition-colors group"
-          >
+        >
             <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
             <span className="font-medium">Back to Dashboard</span>
-          </button>
+        </button>
 
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
             <div>
@@ -245,8 +245,8 @@ const SchedulePage = () => {
                 <div className="p-2 bg-blue-100 rounded-xl">
                   <Calendar className="w-8 h-8 text-blue-600" />
                 </div>
-                Manage Your Availability
-              </h1>
+          Manage Your Availability
+        </h1>
               <p className="text-gray-600">
                 Welcome back, <span className="font-semibold text-gray-800">{userEmail}</span>
               </p>
@@ -301,7 +301,7 @@ const SchedulePage = () => {
             onSelectSlot={handleSelectSlot}
             onSelectDate={handleSelectDate}
           />
-        </div>
+      </div>
 
         {/* View Slot Modal */}
         <ViewSlotModal
