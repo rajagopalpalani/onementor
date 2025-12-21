@@ -59,7 +59,10 @@ export default function Features() {
           </div>
 
           {/* AI-Powered Insights */}
-          <div className="card text-center p-6 group hover:scale-105 transition-transform duration-300">
+          <div className="card text-center p-6 group hover:scale-105 transition-transform duration-300 relative">
+            <div className="absolute top-4 right-4 bg-amber-100 text-amber-700 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide border border-amber-200">
+              Coming Soon
+            </div>
             <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center mx-auto mb-5 group-hover:scale-110 transition-transform duration-300">
               <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
