@@ -12,7 +12,7 @@ import { getCalendarAuthUrl, getCalendarStatus, disconnectCalendar } from "@/ser
 const ProfileForm = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  
+
   // Mapping of short forms to full expertise text
   const expertiseMapping = {
     "fitness": "Fitness & Wellness",
@@ -51,22 +51,40 @@ const ProfileForm = () => {
   });
 
   useEffect(() => {
-    // Fetch existing profile if any
     const userId = localStorage.getItem("userId");
+    const urlParams = new URLSearchParams(window.location.search);
+    const isReturningFromCalendar = urlParams.get('calendar_connected') === 'true' || urlParams.get('calendar_error');
+
+    let draftRestored = false;
+
+    // Restore draft if returning from calendar connection
+    if (isReturningFromCalendar) {
+      const draft = localStorage.getItem('coachProfileDraft');
+      if (draft) {
+        try {
+          const parsed = JSON.parse(draft);
+          setFormData(parsed);
+          draftRestored = true;
+          // Clear draft after restoring
+          localStorage.removeItem('coachProfileDraft');
+        } catch (e) {
+          console.error("Failed to parse coach profile draft", e);
+        }
+      }
+    }
+
     if (userId) {
-      fetchProfile(userId);
+      // Only fetch profile from DB if we didn't restore a draft
+      if (!draftRestored) {
+        fetchProfile(userId);
+      }
       fetchCalendarStatus(userId);
     }
 
-    // Check for OAuth callback parameters
-    const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('calendar_connected') === 'true') {
       toastrSuccess('Google Calendar connected successfully!');
       // Clean URL
       window.history.replaceState({}, document.title, window.location.pathname);
-      if (userId) {
-        fetchCalendarStatus(userId);
-      }
     }
     if (urlParams.get('calendar_error')) {
       toastrError(`Calendar connection failed: ${urlParams.get('calendar_error')}`);
@@ -77,12 +95,12 @@ const ProfileForm = () => {
   const fetchProfile = async (userId) => {
     try {
       const response = await getMentorProfile(userId);
-      
+
       if (response.error) {
         // Profile doesn't exist yet, which is fine
         return;
       }
-      
+
       const data = response;
       const category = data.category || "";
       // Check if category is one of the predefined full text options or short forms
@@ -91,10 +109,10 @@ const ProfileForm = () => {
       const isShortForm = predefinedShortForms.includes(category);
       const isFullText = predefinedFullTexts.includes(category);
       const isCustom = category && !isShortForm && !isFullText;
-      
+
       // Convert full text to short form if needed, or use short form directly
       const shortForm = isFullText ? expertiseReverseMapping[category] : (isShortForm ? category : null);
-      
+
       setFormData({
         name: data.username || "",
         expertise: isCustom ? "other" : (shortForm || ""),
@@ -133,7 +151,7 @@ const ProfileForm = () => {
     try {
       setCalendarStatus(prev => ({ ...prev, loading: true }));
       const response = await getCalendarStatus(userId);
-      
+
       if (response.error) {
         setCalendarStatus({
           connected: false,
@@ -166,8 +184,11 @@ const ProfileForm = () => {
     }
 
     try {
+      // Save form state to localStorage before redirecting
+      localStorage.setItem('coachProfileDraft', JSON.stringify(formData));
+
       const response = await getCalendarAuthUrl(userId);
-      
+
       if (response.error) {
         toastrError(response.error || "Failed to get authorization URL");
         return;
@@ -195,7 +216,7 @@ const ProfileForm = () => {
 
     try {
       const response = await disconnectCalendar(userId);
-      
+
       if (response.error) {
         toastrError(response.error || "Failed to disconnect calendar");
         return;
@@ -219,6 +240,12 @@ const ProfileForm = () => {
       return;
     }
 
+    // Validate Google Calendar connection
+    if (!calendarStatus.connected) {
+      toastrError("Please connect your Google Calendar to proceed");
+      return;
+    }
+
     // Validate custom expertise if "other" is selected
     if (formData.expertise === "other") {
       if (!formData.customExpertise || formData.customExpertise.trim() === "") {
@@ -231,8 +258,8 @@ const ProfileForm = () => {
     formDataObj.append("user_id", userId);
     formDataObj.append("username", formData.name);
     // Use custom expertise if "other" is selected, otherwise convert short form to full text
-    const categoryValue = formData.expertise === "other" 
-      ? formData.customExpertise.trim() 
+    const categoryValue = formData.expertise === "other"
+      ? formData.customExpertise.trim()
       : (expertiseMapping[formData.expertise] || formData.expertise);
     formDataObj.append("category", categoryValue);
     formDataObj.append("bio", formData.bio);
@@ -242,7 +269,7 @@ const ProfileForm = () => {
     setLoading(true);
     try {
       const response = await createMentorProfile(formDataObj);
-      
+
       if (response.error) {
         toastrError(response.error || "Failed to save profile");
         return;
@@ -250,7 +277,7 @@ const ProfileForm = () => {
 
       console.log("Server Response:", response);
       toastrSuccess("Profile saved successfully!");
-      
+
       setTimeout(() => {
         router.push("/dashboard/coach");
       }, 1500);
@@ -427,14 +454,16 @@ const ProfileForm = () => {
                 <CalendarIcon className="w-7 h-7 text-orange-600" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-gray-900">Google Calendar Integration</h2>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Google Calendar Integration <span className="text-red-500 text-sm font-normal ml-2">(Required)</span>
+                </h2>
                 <p className="text-sm text-gray-600">Connect your calendar to automatically create events and send meeting links</p>
               </div>
             </div>
 
             {calendarStatus.loading ? (
               <div className="flex items-center justify-center py-8">
-                <div className="spinner" style={{width: '24px', height: '24px', borderWidth: '3px'}}></div>
+                <div className="spinner" style={{ width: '24px', height: '24px', borderWidth: '3px' }}></div>
                 <span className="ml-3 text-gray-600">Checking calendar status...</span>
               </div>
             ) : calendarStatus.connected ? (
@@ -481,10 +510,10 @@ const ProfileForm = () => {
                   className="btn btn-primary px-6 py-3 flex items-center justify-center"
                 >
                   <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                    <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                    <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                   </svg>
                   Connect Google Calendar
                 </button>
@@ -509,7 +538,7 @@ const ProfileForm = () => {
             >
               {loading ? (
                 <div className="flex items-center">
-                  <div className="spinner mr-2" style={{width: '20px', height: '20px', borderWidth: '2px'}}></div>
+                  <div className="spinner mr-2" style={{ width: '20px', height: '20px', borderWidth: '2px' }}></div>
                   Saving Profile...
                 </div>
               ) : (
