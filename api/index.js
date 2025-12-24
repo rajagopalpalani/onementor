@@ -6,6 +6,8 @@ const path = require('path');
 const session = require('express-session');
 require('dotenv').config();
 
+
+
 // Routes
 const userRouter = require('./routes/usersRoute');
 const authRoutes = require("./routes/authRoute");
@@ -97,6 +99,14 @@ app.use("/api/mentor/slots", slotManagementRoutes);
 // Mentor booking requests
 const requestRoutes = require("./routes/coach/request");
 app.use("/api/mentor/requests", requestRoutes);
+
+// Mentor calendar integration
+const mentorCalendarRoutes = require("./routes/coach/calendar");
+app.use("/api/mentor/calendar", mentorCalendarRoutes);
+
+// User calendar integration
+const userCalendarRoutes = require("./routes/user/calendar");
+app.use("/api/user/calendar", userCalendarRoutes);
 
 // Payment routes
 app.use("/api/payment", paymentRoutes);
