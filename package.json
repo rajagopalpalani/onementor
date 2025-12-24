@@ -1,0 +1,14 @@
+{
+  "name": "onementor-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev:api": "npm --prefix api run dev",
+    "dev:ui": "npm --prefix ui run dev",
+    "install:api": "npm --prefix api install",
+    "install:ui": "npm --prefix ui install",
+    "install:all": "npm run install:api && npm run install:ui",
+    "setup": "npm run install:all",
+    "dev": "npx concurrently \"npm --prefix api run dev\" \"npm --prefix ui run dev\""
+  }
+}

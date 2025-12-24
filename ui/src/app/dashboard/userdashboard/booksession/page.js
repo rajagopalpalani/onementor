@@ -19,6 +19,7 @@ const BookSessionPage = () => {
   const [loading, setLoading] = useState(false);
   const [availableSlots, setAvailableSlots] = useState([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [datesWithSlots, setDatesWithSlots] = useState([]);
   const router = useRouter();
   const searchParams = useSearchParams();
   const coachId = searchParams.get('coachId');
@@ -33,7 +34,7 @@ const BookSessionPage = () => {
 
       try {
         const response = await getMentorProfile(coachId);
-        
+
         if (response.error) {
           toastrError(response.error || "Failed to load coach information");
           router.push('/dashboard/userdashboard/coachdiscovery');
@@ -41,16 +42,16 @@ const BookSessionPage = () => {
         }
 
         const mentor = response;
-        
+
         // Handle skills - can be JSON string, array, or null
         let skillsText = '';
         if (mentor.skills) {
           try {
-            const skillsArray = typeof mentor.skills === 'string' 
-              ? JSON.parse(mentor.skills) 
+            const skillsArray = typeof mentor.skills === 'string'
+              ? JSON.parse(mentor.skills)
               : mentor.skills;
-            skillsText = Array.isArray(skillsArray) 
-              ? skillsArray.join(', ') 
+            skillsText = Array.isArray(skillsArray)
+              ? skillsArray.join(', ')
               : (typeof mentor.skills === 'string' ? mentor.skills : '');
           } catch (e) {
             skillsText = typeof mentor.skills === 'string' ? mentor.skills : '';
@@ -81,6 +82,74 @@ const BookSessionPage = () => {
     fetchCoachData();
   }, [coachId, router]);
 
+  // Fetch all available slots to highlight dates in calendar
+  useEffect(() => {
+    const fetchAllAvailableSlots = async () => {
+      if (!coachId) return;
+
+      try {
+        const allSlotsResponse = await getSlotsByMentor(coachId, {
+          is_booked: 0,
+          is_active: 1
+        });
+
+        if (allSlotsResponse.error) {
+          console.error("Error fetching all slots:", allSlotsResponse.error);
+          return;
+        }
+
+        const allSlots = Array.isArray(allSlotsResponse) ? allSlotsResponse : [];
+
+        console.log("All slots from API:", JSON.stringify(allSlots, null, 2));
+
+        // Extract unique dates from slots
+        // API now returns dates in YYYY-MM-DD format
+        const uniqueDates = new Set();
+        allSlots.forEach(slot => {
+          if (slot.date) {
+            // API should return date as YYYY-MM-DD string
+            let dateStr = '';
+
+            if (typeof slot.date === 'string') {
+              // Extract YYYY-MM-DD from string (handle ISO format if any)
+              dateStr = slot.date.split('T')[0].split(' ')[0];
+            } else if (slot.date instanceof Date) {
+              // Fallback: format Date object (shouldn't happen with API fix)
+              const year = slot.date.getFullYear();
+              const month = String(slot.date.getMonth() + 1).padStart(2, '0');
+              const day = String(slot.date.getDate()).padStart(2, '0');
+              dateStr = `${year}-${month}-${day}`;
+            }
+
+            // Validate and add date
+            if (dateStr && dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              uniqueDates.add(dateStr);
+              console.log("Added date:", dateStr, "from slot id:", slot.id);
+            } else {
+              console.warn("Invalid date format:", slot.date, "from slot:", slot);
+            }
+          }
+        });
+
+        console.log("Unique dates with slots:", Array.from(uniqueDates).sort());
+
+        // Convert to Date objects for react-datepicker (using local timezone)
+        const datesArray = Array.from(uniqueDates).map(dateStr => {
+          const [year, month, day] = dateStr.split('-').map(Number);
+          // Create date at noon local time to avoid timezone edge cases
+          return new Date(year, month - 1, day, 12, 0, 0);
+        });
+
+        console.log("Dates array for datepicker:", datesArray);
+        setDatesWithSlots(datesArray);
+      } catch (error) {
+        console.error("Error fetching all available slots:", error);
+      }
+    };
+
+    fetchAllAvailableSlots();
+  }, [coachId]);
+
   // Fetch available slots when date is selected
   useEffect(() => {
     const fetchAvailableSlots = async () => {
@@ -102,7 +171,7 @@ const BookSessionPage = () => {
 
         const dateString = formatDate(selectedDate);
         console.log("Fetching slots for mentor:", coachId, "date:", dateString);
-        
+
         const slotsResponse = await getSlotsByMentor(coachId, {
           date: dateString,
           is_booked: 0,
@@ -119,25 +188,25 @@ const BookSessionPage = () => {
 
         const slots = Array.isArray(slotsResponse) ? slotsResponse : [];
         console.log("Parsed slots:", slots);
-        
+
         // Format slots to extract time and create time slot objects
         const formattedSlots = slots.map(slot => {
           // Handle time format - could be "HH:MM:SS" or "HH:MM"
           let startTimeStr = '';
           let endTimeStr = '';
-          
+
           if (slot.start_time) {
-            startTimeStr = slot.start_time.includes(':') 
+            startTimeStr = slot.start_time.includes(':')
               ? slot.start_time.substring(0, 5) // Get HH:MM from "HH:MM:SS"
               : slot.start_time;
           }
-          
+
           if (slot.end_time) {
             endTimeStr = slot.end_time.includes(':')
               ? slot.end_time.substring(0, 5) // Get HH:MM from "HH:MM:SS"
               : slot.end_time;
           }
-          
+
           return {
             id: slot.id,
             start_time: startTimeStr,
@@ -162,23 +231,23 @@ const BookSessionPage = () => {
   }, [selectedDate, coachId]);
 
   const sessionTypes = [
-    { 
-      id: "quick", 
-      name: "Quick Session", 
-      duration: "30 min", 
-      price: coach?.hourly_rate ? `₹${Math.round(parseFloat(coach.hourly_rate) / 2).toLocaleString('en-IN')}` : "₹0" 
+    {
+      id: "quick",
+      name: "Quick Session",
+      duration: "30 min",
+      price: coach?.hourly_rate ? `₹${Math.round(parseFloat(coach.hourly_rate) / 2).toLocaleString('en-IN')}` : "₹0"
     },
-    { 
-      id: "standard", 
-      name: "Standard Session", 
-      duration: "60 min", 
-      price: coach?.price || (coach?.hourly_rate ? `₹${parseFloat(coach.hourly_rate).toLocaleString('en-IN')}` : "₹0") 
+    {
+      id: "standard",
+      name: "Standard Session",
+      duration: "60 min",
+      price: coach?.price || (coach?.hourly_rate ? `₹${parseFloat(coach.hourly_rate).toLocaleString('en-IN')}` : "₹0")
     },
-    { 
-      id: "extended", 
-      name: "Extended Session", 
-      duration: "90 min", 
-      price: coach?.hourly_rate ? `₹${Math.round(parseFloat(coach.hourly_rate) * 1.5).toLocaleString('en-IN')}` : "₹0" 
+    {
+      id: "extended",
+      name: "Extended Session",
+      duration: "90 min",
+      price: coach?.hourly_rate ? `₹${Math.round(parseFloat(coach.hourly_rate) * 1.5).toLocaleString('en-IN')}` : "₹0"
     }
   ];
 
@@ -196,7 +265,7 @@ const BookSessionPage = () => {
     }
 
     setLoading(true);
-    
+
     try {
       // Create booking
       const bookingData = {
@@ -211,28 +280,28 @@ const BookSessionPage = () => {
       if (bookingResult.error) {
         throw new Error(bookingResult.error || "Failed to create booking");
       }
-      
-        // Redirect to payment if payment URL is provided
-        if (bookingResult.payment && bookingResult.payment.payment_url) {
-          // Store booking info for after payment
-          localStorage.setItem("pendingBooking", JSON.stringify({
-            bookingId: bookingResult.booking.id,
-            orderId: bookingResult.payment.order_id
-          }));
-          
-          toastrSuccess("Booking created! Redirecting to payment...");
-          
-          // Redirect to payment
-          setTimeout(() => {
-            window.location.href = bookingResult.payment.payment_url;
-          }, 1000);
-        } else {
-          toastrSuccess("Booking created! Please complete payment.");
-          router.push(`/dashboard/userdashboard/userpayment?bookingId=${bookingResult.booking.id}`);
-        }
-      } catch (err) {
-        console.error("Booking error:", err);
-        toastrError(err.message || "Failed to book session. Please try again.");
+
+      // Redirect to payment if payment URL is provided
+      if (bookingResult.payment && bookingResult.payment.payment_url) {
+        // Store booking info for after payment
+        localStorage.setItem("pendingBooking", JSON.stringify({
+          bookingId: bookingResult.booking.id,
+          orderId: bookingResult.payment.order_id
+        }));
+
+        toastrSuccess("Booking created! Redirecting to payment...");
+
+        // Redirect to payment
+        setTimeout(() => {
+          window.location.href = bookingResult.payment.payment_url;
+        }, 1000);
+      } else {
+        toastrSuccess("Booking created! Please complete payment.");
+        router.push(`/dashboard/userdashboard/userpayment?bookingId=${bookingResult.booking.id}`);
+      }
+    } catch (err) {
+      console.error("Booking error:", err);
+      toastrError(err.message || "Failed to book session. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -285,8 +354,8 @@ const BookSessionPage = () => {
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">{coach.name}</h3>
                 <p className="text-[var(--primary)] font-semibold mb-3">{coach.expertise}</p>
-                <p 
-                  className="text-gray-600 text-sm line-clamp-2 cursor-help" 
+                <p
+                  className="text-gray-600 text-sm line-clamp-2 cursor-help"
                   title={coach.bio}
                 >
                   {coach.bio}
@@ -371,6 +440,24 @@ const BookSessionPage = () => {
                   dateFormat="MMMM dd, yyyy"
                   className="input-professional w-full"
                   placeholderText="Select a date"
+                  highlightDates={datesWithSlots}
+                  renderDayContents={(dayOfMonth, date) => {
+                    if (!date) return dayOfMonth;
+                    // Format date as YYYY-MM-DD for comparison
+                    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+                    // Compare with dates from API (stored as YYYY-MM-DD strings)
+                    const hasSlot = datesWithSlots.some(d => {
+                      const dStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                      return dStr === dateStr;
+                    });
+
+                    return (
+                      <div className={`flex items-center justify-center w-8 h-8 rounded-full mx-auto ${hasSlot ? 'bg-green-500 text-white font-medium shadow-sm' : ''}`}>
+                        {dayOfMonth}
+                      </div>
+                    );
+                  }}
                 />
               </div>
 
@@ -391,11 +478,10 @@ const BookSessionPage = () => {
                       {availableSlots.map((slot) => (
                         <button
                           key={slot.id}
-                          className={`px-4 py-3 text-sm rounded-lg border transition-all whitespace-nowrap flex-shrink-0 ${
-                            selectedSlot?.id === slot.id
-                              ? 'border-[var(--primary)] bg-blue-50 text-[var(--primary)] font-semibold'
-                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                          }`}
+                          className={`px-4 py-3 text-sm rounded-lg border transition-all whitespace-nowrap flex-shrink-0 ${selectedSlot?.id === slot.id
+                            ? 'border-[var(--primary)] bg-blue-50 text-[var(--primary)] font-semibold'
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                            }`}
                           onClick={() => setSelectedSlot(slot)}
                         >
                           {slot.start_time} - {slot.end_time}
@@ -426,7 +512,7 @@ const BookSessionPage = () => {
                     <p><span className="text-gray-600">Time:</span> {selectedSlot.start_time} - {selectedSlot.end_time}</p>
                     <p><span className="text-gray-600">Duration:</span> {sessionTypes.find(t => t.id === sessionType)?.duration}</p>
                     <p className="font-semibold">
-                      <span className="text-gray-600">Total:</span> 
+                      <span className="text-gray-600">Total:</span>
                       <CurrencyRupeeIcon className="w-4 h-4 inline mx-1" />
                       {sessionTypes.find(t => t.id === sessionType)?.price}
                     </p>
