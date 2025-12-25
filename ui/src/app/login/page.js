@@ -188,7 +188,7 @@ export default function Login() {
                   alt="OneMentor"
                   width={100}
                   height={100}
-                  className="rounded-full border-4 border-[var(--primary)] shadow-xl mx-auto"
+                  // className="rounded-full border-4 border-[var(--primary)] shadow-xl mx-auto"
                 />
               </div>
               <h1 className="text-4xl lg:text-5xl font-bold gradient-text leading-tight">
