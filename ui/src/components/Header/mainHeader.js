@@ -11,7 +11,7 @@ export default function MainHeader() {
 
                     {/* Logo Only */}
                     <Link href="/" className="group flex items-center gap-2">
-                        <div className="w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden border-2 border-white/50 shadow-md transition-transform duration-300 group-hover:scale-105">
+                        <div >
                             <Image
                                 src="/images/onementor.jpg"
                                 alt="OneMentor Logo"
