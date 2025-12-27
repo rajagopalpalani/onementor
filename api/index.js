@@ -38,8 +38,8 @@ if (process.env.SSL === 'true') {
   });
 
   const sslOptions = {
-    key: fs.readFileSync("/etc/letsencrypt/live/yourdomain.com/privkey.pem"),
-    cert: fs.readFileSync("/etc/letsencrypt/live/yourdomain.com/fullchain.pem"),
+    key: fs.readFileSync("/etc/letsencrypt/live/api.onementor.in/privkey.pem"),
+    cert: fs.readFileSync("/etc/letsencrypt/live/api.onementor.in/fullchain.pem"),
   };
 
   https.createServer(sslOptions, app).listen(443, () => {
