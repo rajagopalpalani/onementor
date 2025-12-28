@@ -15,7 +15,7 @@ export default function Footer() {
                     {/* Brand Section */}
                     <div className="col-span-1 md:col-span-2">
                         <div className="mb-6 flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/50 shadow-md">
+                            <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-white/50 shadow-md">
                                 <Image
                                     src="/images/onementor.jpg"
                                     alt="OneMentor Logo"
