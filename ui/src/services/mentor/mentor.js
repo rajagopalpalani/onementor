@@ -194,3 +194,21 @@ export async function updateBookingStatus(bookingId, mentorId, status, meetingLi
   }
 }
 
+// Get registration fee
+export async function getRegistrationFee() {
+  try {
+    const res = await fetch(`${API_BASE}/api/registration-fee`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { error: data.error || 'Failed to fetch registration fee' };
+    }
+    return data;
+  } catch (err) {
+    console.error('getRegistrationFee error', err);
+    return { error: 'Network error' };
+  }
+}
+
