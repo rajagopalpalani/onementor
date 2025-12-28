@@ -3,8 +3,11 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
+const https = require('https');
 const session = require('express-session');
 require('dotenv').config();
+
 
 
 
@@ -32,6 +35,20 @@ const registrationFeeRoutes = require("./routes/registrationFeeRoutes");
 const { swaggerUi, specs } = require('./config/swagger');
 
 const app = express();
+if (process.env.SSL === 'true') {
+  app.get("/", (req, res) => {
+    res.send("HTTPS working");
+  });
+
+  const sslOptions = {
+    key: fs.readFileSync("/etc/letsencrypt/live/api.onementor.in/privkey.pem"),
+    cert: fs.readFileSync("/etc/letsencrypt/live/api.onementor.in/fullchain.pem"),
+  };
+
+  https.createServer(sslOptions, app).listen(443, () => {
+    console.log("🚀 HTTPS server running on port 443");
+  });
+}
 
 // CORS setup for frontend
 app.use(cors({
@@ -110,6 +127,10 @@ app.use("/api/mentor/calendar", mentorCalendarRoutes);
 // User calendar integration
 const userCalendarRoutes = require("./routes/user/calendar");
 app.use("/api/user/calendar", userCalendarRoutes);
+
+// User sessions
+const userSessionRoutes = require("./routes/user/sessions");
+app.use("/api/user/sessions", userSessionRoutes);
 
 // Payment routes
 app.use("/api/payment", paymentRoutes);
