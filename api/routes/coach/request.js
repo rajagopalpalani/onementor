@@ -30,14 +30,21 @@ router.get("/:mentor_id", async (req, res) => {
     const params = [mentor_id];
 
     if (status) {
-      query += " AND b.status = ?";
-      params.push(status);
+      const statusList = status.split(',');
+      if (statusList.length === 1) {
+        query += " AND b.status = ?";
+        params.push(status);
+      } else {
+        const placeholders = statusList.map(() => '?').join(',');
+        query += ` AND b.status IN (${placeholders})`;
+        params.push(...statusList);
+      }
     }
 
     query += " ORDER BY b.created_at DESC LIMIT 1000";
 
     const [rows] = await db.query(query, params);
-    
+
     // Parse slots JSON and enrich with slot details
     const formattedRows = await Promise.all(rows.map(async (row) => {
       // Parse slots JSON array
@@ -73,7 +80,7 @@ router.get("/:mentor_id", async (req, res) => {
         slots: slotsDetails
       };
     }));
-    
+
     res.json(formattedRows);
   } catch (err) {
     console.error(err);
