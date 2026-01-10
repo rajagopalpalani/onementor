@@ -228,10 +228,12 @@ exports.getUserStats = async (req, res) => {
       [user_id]
     );
 
-    // 2. Active Coaches (Distinct mentors)
+    // 2. Active Coaches (All available mentors on platform)
     const [[coachResult]] = await db.query(
-      `SELECT COUNT(DISTINCT mentor_id) AS activeCoaches FROM bookings WHERE user_id = ? AND status IN ('confirmed', 'completed')`,
-      [user_id]
+      `SELECT COUNT(u.id) AS activeCoaches 
+       FROM users u
+       INNER JOIN mentor_profiles mp ON u.id = mp.user_id
+       WHERE u.role = 'mentor' AND u.is_active = 1 AND mp.registered = 1`
     );
 
     // 3. Upcoming Sessions (Count individual slots)
@@ -270,6 +272,146 @@ exports.getUserStats = async (req, res) => {
 
   } catch (err) {
     console.error("User stats error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/* ===========================
+   GET MEETING DETAILS
+=========================== */
+exports.getMeetingDetails = async (req, res) => {
+  try {
+    const { booking_id } = req.params;
+    const { user_id } = req.query;
+
+    if (!booking_id || !user_id) {
+      return res.status(400).json({ error: "Booking ID and User ID required" });
+    }
+
+    const [bookings] = await db.query(
+      `SELECT b.*, 
+              u.name as student_name, u.email as student_email,
+              m.name as mentor_name, m.email as mentor_email
+       FROM bookings b
+       JOIN users u ON b.user_id = u.id
+       JOIN users m ON b.mentor_id = m.id
+       WHERE b.id = ?`,
+      [booking_id]
+    );
+
+    if (bookings.length === 0) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+
+    const booking = bookings[0];
+
+    // Access Control
+    // Allow strict string comparison to avoid type coercion issues
+    if (String(booking.user_id) !== String(user_id) && String(booking.mentor_id) !== String(user_id)) {
+      return res.status(403).json({ error: "Unauthorized access to this meeting" });
+    }
+
+    // Time Validation
+    let slotIds = [];
+    if (booking.slots) {
+      if (typeof booking.slots === 'string') {
+        try {
+          slotIds = JSON.parse(booking.slots);
+        } catch (e) { slotIds = []; }
+      } else {
+        slotIds = booking.slots;
+      }
+    }
+
+    if (!slotIds || slotIds.length === 0) {
+      return res.status(400).json({ error: "No slots found for this booking" });
+    }
+
+    const placeholders = slotIds.map(() => '?').join(',');
+    const [slots] = await db.query(
+      `SELECT date, start_time, end_time FROM mentor_slots WHERE id IN (${placeholders}) ORDER BY date ASC, start_time ASC`,
+      slotIds
+    );
+
+    if (slots.length === 0) {
+      return res.status(400).json({ error: "Slots data missing" });
+    }
+
+    const firstSlot = slots[0];
+    const lastSlot = slots[slots.length - 1];
+
+    // Construct Date objects manually to ensure correct parsing (assuming stored as YYYY-MM-DD and HH:mm:ss)
+    // Note: dates from DB might be JS Date objects already if driver handles DATE type.
+    // TIME type comes as string usually.
+    // Let's assume date is Date object and start_time is string "HH:MM:SS"
+
+    const formatDate = (dateObj, timeStr) => {
+      const d = new Date(dateObj);
+      const [h, m, s] = timeStr.split(':');
+      d.setHours(parseInt(h), parseInt(m), parseInt(s) || 0);
+      return d;
+    };
+
+    const startDateTime = formatDate(firstSlot.date, firstSlot.start_time);
+    const endDateTime = formatDate(lastSlot.date, lastSlot.end_time);
+    const now = new Date();
+
+    // Allow joining 10 minutes before
+    const allowJoinTime = new Date(startDateTime.getTime() - 10 * 60000);
+
+    // Time validation - prevent joining after session end
+    if (now > endDateTime) {
+      return res.json({
+        success: false,
+        status: 'ended',
+        message: "This session has ended. You cannot join after the session end time."
+      });
+    } else if (now >= allowJoinTime) {
+      // Live - allow joining
+    } else {
+      return res.json({
+        success: false,
+        status: 'upcoming',
+        startTime: startDateTime,
+        message: "Session has not started yet. You can join 10 minutes before start."
+      });
+    }
+
+    // Generate Jitsi room details with JWT token
+    const jitsiService = require('../../services/jitsiService');
+    const isMentor = String(booking.mentor_id) === String(user_id);
+    
+    const jitsiRoom = jitsiService.createJitsiRoom({
+      bookingId: booking.id,
+      startDateTime: startDateTime,
+      endDateTime: endDateTime,
+      user: {
+        id: user_id,
+        name: isMentor ? booking.mentor_name : booking.student_name,
+        email: isMentor ? booking.mentor_email : booking.student_email,
+        role: isMentor ? 'mentor' : 'user'
+      }
+    });
+
+    const userInfo = {
+      displayName: isMentor ? booking.mentor_name : booking.student_name,
+      email: isMentor ? booking.mentor_email : booking.student_email,
+    };
+
+    res.json({
+      success: true,
+      status: 'live',
+      roomName: jitsiRoom.roomName,
+      token: jitsiRoom.token,
+      jitsiUrl: jitsiRoom.jitsiUrl,
+      deepLink: jitsiRoom.deepLink,
+      userInfo,
+      config: jitsiRoom.config,
+      sessionEndTime: endDateTime.toISOString()
+    });
+
+  } catch (err) {
+    console.error("Meeting details error:", err);
     res.status(500).json({ error: err.message });
   }
 };
