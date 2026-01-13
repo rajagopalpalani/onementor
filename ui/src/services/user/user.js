@@ -161,39 +161,51 @@ export async function getUsersByRole(role) {
   }
 }
 
-// Get all users (for admin dashboard) - simplified approach
+// Get all users (for admin dashboard) - using backend API
 export async function getAllUsers() {
   try {
-    // Try to get all users from a general endpoint
-    const res = await fetch(`${API_URL}admin/users`, {
+    console.log('🔍 Fetching all users from backend API...');
+
+    const res = await fetch(`${API_URL}users/all`, {
       method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
       credentials: 'include',
     });
 
     if (!res.ok) {
-      // If admin endpoint doesn't exist, return error
-      return { error: 'Admin users endpoint not available' };
+      const errorText = await res.text();
+      console.error('❌ Backend API error:', errorText);
+      return { error: `Failed to fetch users: ${res.status}` };
     }
 
-    const data = await res.json();
-    return data;
+    const response = await res.json();
+    console.log('✅ Backend API response:', response);
+
+    // Handle the response structure from your backend
+    if (response.success && response.data) {
+      console.log('📊 Returning all users from backend:', response.data.length, 'users');
+      return response.data;
+    } else if (Array.isArray(response)) {
+      console.log('📊 Returning user array from backend:', response.length, 'users');
+      return response;
+    } else {
+      console.log('📊 Unexpected response structure');
+      return { error: 'Unexpected response format' };
+    }
   } catch (err) {
-    console.error('getAllUsers error', err);
-    return { error: 'Network error' };
+    console.error('❌ getAllUsers error', err);
+    return { error: 'Network error while fetching users' };
   }
 }
 
-// Get mentors (users with role 'mentor') - using existing backend API
+// Get mentors (users with role 'mentor') - using backend API
 export async function getMentors() {
   try {
-    console.log('🔍 Attempting to fetch mentors from backend API...');
-    console.log('🌐 API_URL:', API_URL);
+    console.log('🔍 Fetching mentors from backend API...');
 
-    // Try the backend API endpoint for mentors
-    const mentorUrl = `${API_URL}users/role/mentor`;
-    console.log('🎯 Backend API URL:', mentorUrl);
-
-    const res = await fetch(mentorUrl, {
+    const res = await fetch(`${API_URL}users/role/mentor`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -201,93 +213,38 @@ export async function getMentors() {
       credentials: 'include',
     });
 
-    console.log('📡 Backend API response status:', res.status);
-
-    if (res.ok) {
-      const response = await res.json();
-      console.log('✅ Backend API response:', response);
-
-      // Handle different response structures from your backend
-      if (response.success && response.data) {
-        console.log('📊 Returning mentor data from backend:', response.data.length, 'mentors');
-        return response.data;
-      } else if (Array.isArray(response)) {
-        console.log('📊 Returning mentor array from backend:', response.length, 'mentors');
-        return response;
-      } else if (response.data && Array.isArray(response.data)) {
-        console.log('📊 Returning mentor data array from backend:', response.data.length, 'mentors');
-        return response.data;
-      } else {
-        console.log('📊 Unexpected response structure, returning as array');
-        return [response];
-      }
-    } else {
-      // Log the error response
+    if (!res.ok) {
       const errorText = await res.text();
-      console.log('❌ Backend API error response:', errorText);
+      console.error('❌ Backend API error:', errorText);
+      return { error: `Failed to fetch mentors: ${res.status}` };
+    }
 
-      // Return mock data based on your database structure
-      console.log('🔄 Backend API failed, returning mock mentors from your database');
-      return [
-        {
-          id: 5,
-          name: "suresh",
-          email: "sureshs68167@gmail.com",
-          phone: "9361852813",
-          role: "mentor",
-          is_active: 1,
-          is_verified: 1
-        },
-        {
-          id: 12,
-          name: "roshan",
-          email: "roshan123durai25@gmail.com",
-          phone: "9481407406",
-          role: "mentor",
-          is_active: 1,
-          is_verified: 1
-        }
-      ];
+    const response = await res.json();
+    console.log('✅ Backend API response:', response);
+
+    // Handle the response structure from your backend
+    if (response.success && response.data) {
+      console.log('📊 Returning mentor data from backend:', response.data.length, 'mentors');
+      return response.data;
+    } else if (Array.isArray(response)) {
+      console.log('📊 Returning mentor array from backend:', response.length, 'mentors');
+      return response;
+    } else {
+      console.log('📊 Unexpected response structure');
+      return { error: 'Unexpected response format' };
     }
   } catch (err) {
     console.error('❌ getMentors error', err);
-
-    // Return mock data on network error
-    console.log('🔄 Network error, returning mock mentors from your database');
-    return [
-      {
-        id: 5,
-        name: "suresh",
-        email: "sureshs68167@gmail.com",
-        phone: "9361852813",
-        role: "mentor",
-        is_active: 1,
-        is_verified: 1
-      },
-      {
-        id: 12,
-        name: "roshan",
-        email: "roshan123durai25@gmail.com",
-        phone: "9481407406",
-        role: "mentor",
-        is_active: 1,
-        is_verified: 1
-      }
-    ];
+    return { error: 'Network error while fetching mentors' };
   }
 }
 
-// Get mentees (users with role 'user') - using existing backend API
+// Get mentees (users with role 'user') - using backend API
 export async function getMentees() {
   try {
-    console.log('🔍 Attempting to fetch mentees from backend API...');
-    console.log('🌐 API_URL:', API_URL);
+    console.log('🔍 Fetching mentees from backend API...');
 
-    // Try the backend API endpoint for mentees
-    const menteeUrl = `${API_URL}users/role/user`;
-    console.log('🎯 Backend API URL:', menteeUrl);
-
-    const res = await fetch(menteeUrl, {
+    const res = await fetch(`${API_URL}users/role/user`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -295,132 +252,28 @@ export async function getMentees() {
       credentials: 'include',
     });
 
-    console.log('📡 Backend API response status:', res.status);
-
-    if (res.ok) {
-      const response = await res.json();
-      console.log('✅ Backend API response:', response);
-
-      // Handle different response structures from your backend
-      if (response.success && response.data) {
-        console.log('📊 Returning mentee data from backend:', response.data.length, 'mentees');
-        return response.data;
-      } else if (Array.isArray(response)) {
-        console.log('📊 Returning mentee array from backend:', response.length, 'mentees');
-        return response;
-      } else if (response.data && Array.isArray(response.data)) {
-        console.log('📊 Returning mentee data array from backend:', response.data.length, 'mentees');
-        return response.data;
-      } else {
-        console.log('📊 Unexpected response structure, returning as array');
-        return [response];
-      }
-    } else {
-      // Log the error response
+    if (!res.ok) {
       const errorText = await res.text();
-      console.log('❌ Backend API error response:', errorText);
+      console.error('❌ Backend API error:', errorText);
+      return { error: `Failed to fetch mentees: ${res.status}` };
+    }
 
-      // Return mock data based on your database structure
-      console.log('🔄 Backend API failed, returning mock mentees from your database');
-      return [
-        {
-          id: 6,
-          name: "suresh",
-          email: "saravana2003@gmail.com",
-          phone: "9361852813",
-          role: "user",
-          is_active: 1,
-          is_verified: 0
-        },
-        {
-          id: 7,
-          name: "suresh",
-          email: "saravana2942003@gmail.com",
-          phone: "9361852813",
-          role: "user",
-          is_active: 1,
-          is_verified: 1
-        },
-        {
-          id: 8,
-          name: "ram",
-          email: "rajkonar656@gmail.com",
-          phone: "7871845302",
-          role: "user",
-          is_active: 1,
-          is_verified: 1
-        },
-        {
-          id: 9,
-          name: "Ram",
-          email: "ram@gmail.com",
-          phone: "7787834562",
-          role: "user",
-          is_active: 0,
-          is_verified: 0
-        },
-        {
-          id: 11,
-          name: "ram",
-          email: "sureshs68167+1@gmail.com",
-          phone: "9361852813",
-          role: "user",
-          is_active: 1,
-          is_verified: 1
-        }
-      ];
+    const response = await res.json();
+    console.log('✅ Backend API response:', response);
+
+    // Handle the response structure from your backend
+    if (response.success && response.data) {
+      console.log('📊 Returning mentee data from backend:', response.data.length, 'mentees');
+      return response.data;
+    } else if (Array.isArray(response)) {
+      console.log('📊 Returning mentee array from backend:', response.length, 'mentees');
+      return response;
+    } else {
+      console.log('📊 Unexpected response structure');
+      return { error: 'Unexpected response format' };
     }
   } catch (err) {
     console.error('❌ getMentees error', err);
-
-    // Return mock data on network error
-    console.log('🔄 Network error, returning mock mentees from your database');
-    return [
-      {
-        id: 6,
-        name: "suresh",
-        email: "saravana2003@gmail.com",
-        phone: "9361852813",
-        role: "user",
-        is_active: 1,
-        is_verified: 0
-      },
-      {
-        id: 7,
-        name: "suresh",
-        email: "saravana2942003@gmail.com",
-        phone: "9361852813",
-        role: "user",
-        is_active: 1,
-        is_verified: 1
-      },
-      {
-        id: 8,
-        name: "ram",
-        email: "rajkonar656@gmail.com",
-        phone: "7871845302",
-        role: "user",
-        is_active: 1,
-        is_verified: 1
-      },
-      {
-        id: 9,
-        name: "Ram",
-        email: "ram@gmail.com",
-        phone: "7787834562",
-        role: "user",
-        is_active: 0,
-        is_verified: 0
-      },
-      {
-        id: 11,
-        name: "ram",
-        email: "sureshs68167+1@gmail.com",
-        phone: "9361852813",
-        role: "user",
-        is_active: 1,
-        is_verified: 1
-      }
-    ];
+    return { error: 'Network error while fetching mentees' };
   }
 }
