@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { createUser } = require('../services/userservices');
+const db = require('../config/mysql');
 
 router.post('/signup', async (req, res) => {
   try {
@@ -29,6 +30,47 @@ router.post('/signup', async (req, res) => {
     return res.status(201).json(result);
   } catch (err) {
     console.error('Signup error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get users by role (for admin dashboard)
+router.get('/role/:role', async (req, res) => {
+  try {
+    const { role } = req.params;
+    
+    // Validate role
+    if (!['user', 'mentor'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role. Must be "user" or "mentor"' });
+    }
+
+    const query = "SELECT id, name, email, phone, role, is_verified, is_active, created_at FROM users WHERE role = ? ORDER BY created_at DESC";
+    const [rows] = await db.query(query, [role]);
+    
+    return res.status(200).json({
+      success: true,
+      data: rows,
+      count: rows.length
+    });
+  } catch (err) {
+    console.error('Get users by role error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get all users (for admin dashboard)
+router.get('/all', async (req, res) => {
+  try {
+    const query = "SELECT id, name, email, phone, role, is_verified, is_active, created_at FROM users ORDER BY created_at DESC";
+    const [rows] = await db.query(query);
+    
+    return res.status(200).json({
+      success: true,
+      data: rows,
+      count: rows.length
+    });
+  } catch (err) {
+    console.error('Get all users error:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
