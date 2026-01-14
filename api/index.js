@@ -146,6 +146,10 @@ app.use("/api/registration-fee", registrationFeeRoutes);
 const coachRoutes = require("./routes/coachRoute");
 app.use("/api/coach", coachRoutes);
 
+// Mentee management routes
+const menteesRoutes = require("./routes/menteesRoute");
+app.use("/api", menteesRoutes);
+
 // Swagger docs
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 

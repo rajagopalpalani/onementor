@@ -95,7 +95,7 @@ export async function updateUserBasicInfo(userId, userData) {
       credentials: 'include',
       body: JSON.stringify(userData),
     });
-    
+
     const data = await res.json();
     if (!res.ok) {
       return { error: data.error || 'Failed to update user info' };
@@ -112,7 +112,7 @@ export async function getUserFromDatabase(userId) {
   try {
     // First try to get from profile endpoint
     const profileResponse = await getUserProfile(userId);
-    
+
     if (profileResponse && !profileResponse.error) {
       // If profile has user data, return it
       if (profileResponse.name || profileResponse.email || profileResponse.phone) {
@@ -125,12 +125,155 @@ export async function getUserFromDatabase(userId) {
         };
       }
     }
-    
+
     // If profile doesn't have user data, we need to create a backend endpoint
     // For now, return what we have from localStorage as fallback
     return { error: 'User data not available from database' };
   } catch (err) {
     console.error('getUserFromDatabase error', err);
     return { error: 'Network error' };
+  }
+}
+
+// Get all users by role (for admin dashboard)
+export async function getUsersByRole(role) {
+  try {
+    // Since specific role endpoints don't exist, try different approaches
+    if (role === 'mentor') {
+      // Use the existing mentor profile endpoint
+      const res = await fetch(`${API_URL}mentor/profile`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        return { error: data.error || 'Failed to fetch mentors' };
+      }
+      return data;
+    } else {
+      // For users, we need to create a backend endpoint or use a different approach
+      return { error: 'User endpoint not available' };
+    }
+  } catch (err) {
+    console.error('getUsersByRole error', err);
+    return { error: 'Network error' };
+  }
+}
+
+// Get all users (for admin dashboard) - using backend API
+export async function getAllUsers() {
+  try {
+    console.log('🔍 Fetching all users from backend API...');
+
+    const res = await fetch(`${API_URL}users/all`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('❌ Backend API error:', errorText);
+      return { error: `Failed to fetch users: ${res.status}` };
+    }
+
+    const response = await res.json();
+    console.log('✅ Backend API response:', response);
+
+    // Handle the response structure from your backend
+    if (response.success && response.data) {
+      console.log('📊 Returning all users from backend:', response.data.length, 'users');
+      return response.data;
+    } else if (Array.isArray(response)) {
+      console.log('📊 Returning user array from backend:', response.length, 'users');
+      return response;
+    } else {
+      console.log('📊 Unexpected response structure');
+      return { error: 'Unexpected response format' };
+    }
+  } catch (err) {
+    console.error('❌ getAllUsers error', err);
+    return { error: 'Network error while fetching users' };
+  }
+}
+
+// Get mentors (users with role 'mentor') - using backend API
+export async function getMentors() {
+  try {
+    console.log('🔍 Fetching mentors from backend API...');
+
+    const res = await fetch(`${API_URL}users/role/mentor`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('❌ Backend API error:', errorText);
+      return { error: `Failed to fetch mentors: ${res.status}` };
+    }
+
+    const response = await res.json();
+    console.log('✅ Backend API response:', response);
+
+    // Handle the response structure from your backend
+    if (response.success && response.data) {
+      console.log('📊 Returning mentor data from backend:', response.data.length, 'mentors');
+      return response.data;
+    } else if (Array.isArray(response)) {
+      console.log('📊 Returning mentor array from backend:', response.length, 'mentors');
+      return response;
+    } else {
+      console.log('📊 Unexpected response structure');
+      return { error: 'Unexpected response format' };
+    }
+  } catch (err) {
+    console.error('❌ getMentors error', err);
+    return { error: 'Network error while fetching mentors' };
+  }
+}
+
+// Get mentees (users with role 'user') - using backend API
+export async function getMentees() {
+  try {
+    console.log('🔍 Fetching mentees from backend API...');
+
+    const res = await fetch(`${API_URL}users/role/user`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('❌ Backend API error:', errorText);
+      return { error: `Failed to fetch mentees: ${res.status}` };
+    }
+
+    const response = await res.json();
+    console.log('✅ Backend API response:', response);
+
+    // Handle the response structure from your backend
+    if (response.success && response.data) {
+      console.log('📊 Returning mentee data from backend:', response.data.length, 'mentees');
+      return response.data;
+    } else if (Array.isArray(response)) {
+      console.log('📊 Returning mentee array from backend:', response.length, 'mentees');
+      return response;
+    } else {
+      console.log('📊 Unexpected response structure');
+      return { error: 'Unexpected response format' };
+    }
+  } catch (err) {
+    console.error('❌ getMentees error', err);
+    return { error: 'Network error while fetching mentees' };
   }
 }
