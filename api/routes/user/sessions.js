@@ -80,4 +80,35 @@ router.get("/upcoming/:user_id", sessionsController.getUpcomingSessions);
 router.get("/history/:user_id", sessionsController.getSessionHistory);
 router.get("/stats/:user_id", sessionsController.getUserStats);
 
+/**
+ * @swagger
+ * /api/user/sessions/meeting/{booking_id}:
+ *   get:
+ *     summary: Get meeting details for a booking
+ *     tags: [User Sessions]
+ *     parameters:
+ *       - in: path
+ *         name: booking_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Booking ID
+ *       - in: query
+ *         name: user_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: User ID (for authorization)
+ *     responses:
+ *       200:
+ *         description: Meeting details with Jitsi room information
+ *       403:
+ *         description: Unauthorized access
+ *       404:
+ *         description: Booking not found
+ *       500:
+ *         description: Server error
+ */
+router.get("/meeting/:booking_id", sessionsController.getMeetingDetails);
+
 module.exports = router;

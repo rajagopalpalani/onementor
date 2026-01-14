@@ -604,7 +604,7 @@ const BookSessionPageContent = () => {
                     <div className="flex items-start justify-between">
                       <div className="mr-4">
                         <div className="font-semibold text-yellow-900">Connect Google Calendar</div>
-                        <div className="text-sm text-yellow-700">You must connect your Google Calendar before booking to receive invites and meeting links.</div>
+                        <div className="text-sm text-yellow-700">You must connect your Google Calendar before booking to receive calendar invites.</div>
                       </div>
                       <div>
                         <button

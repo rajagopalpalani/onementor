@@ -384,15 +384,25 @@ export default function CoachDashboard() {
 
                         <div className="flex items-center gap-3">
                           {session.meeting_link ? (
-                            <a
-                              href={session.meeting_link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-[11px] font-bold hover:bg-indigo-700 transition-all flex items-center gap-1.5 whitespace-nowrap shadow-sm"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                              Join
-                            </a>
+                            session.booking_id ? (
+                              <button
+                                onClick={() => router.push(`/dashboard/coachdashboard/meeting/${session.booking_id}`)}
+                                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-[11px] font-bold hover:bg-indigo-700 transition-all flex items-center gap-1.5 whitespace-nowrap shadow-sm"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                Join
+                              </button>
+                            ) : (
+                              <a
+                                href={session.meeting_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-[11px] font-bold hover:bg-indigo-700 transition-all flex items-center gap-1.5 whitespace-nowrap shadow-sm"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                Join
+                              </a>
+                            )
                           ) : (
                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50 px-2 py-1 rounded border border-gray-100">
                               No Link

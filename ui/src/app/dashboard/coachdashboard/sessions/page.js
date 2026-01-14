@@ -229,16 +229,27 @@ export default function AllSessionsPage() {
                                                 </p>
                                             </div>
                                             {session.meeting_link ? (
-                                                <a
-                                                    href={session.meeting_link}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                                                    title="Join Meeting"
-                                                >
-                                                    <ExternalLink className="w-4 h-4" />
-                                                    Join Meeting
-                                                </a>
+                                                session.booking_id ? (
+                                                    <button
+                                                        onClick={() => router.push(`/dashboard/coachdashboard/meeting/${session.booking_id}`)}
+                                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                                                        title="Join Meeting"
+                                                    >
+                                                        <ExternalLink className="w-4 h-4" />
+                                                        Join Meeting
+                                                    </button>
+                                                ) : (
+                                                    <a
+                                                        href={session.meeting_link}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                                                        title="Join Meeting"
+                                                    >
+                                                        <ExternalLink className="w-4 h-4" />
+                                                        Join Meeting
+                                                    </a>
+                                                )
                                             ) : (
                                                 <button
                                                     disabled

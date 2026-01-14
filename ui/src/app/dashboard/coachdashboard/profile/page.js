@@ -529,7 +529,7 @@ const ProfileForm = () => {
                   </p>
                   <ul className="list-disc list-inside text-sm text-gray-600 space-y-1 ml-2">
                     <li>Create calendar events for booked sessions</li>
-                    <li>Generate Google Meet links automatically</li>
+                    <li>Generate Jitsi Meet links automatically for video sessions</li>
                     <li>Block time in your calendar</li>
                     <li>Send calendar invites to learners</li>
                   </ul>

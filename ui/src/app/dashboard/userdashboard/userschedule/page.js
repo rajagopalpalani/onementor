@@ -164,15 +164,13 @@ const UserSchedule = () => {
         {!isHistory ? (
           <>
             {session.meetingLink ? (
-              <a
-                href={session.meetingLink}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                onClick={() => router.push(`/dashboard/userdashboard/meeting/${session.booking_id}`)}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
               >
                 <VideoCameraIcon className="w-4 h-4" />
                 Join Session
-              </a>
+              </button>
             ) : (
               <button disabled className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-200 text-gray-400 rounded-xl text-xs font-bold cursor-not-allowed">
                 <VideoCameraIcon className="w-4 h-4" />

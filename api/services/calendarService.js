@@ -184,7 +184,8 @@ async function getCalendarTokens(userId, role = 'mentor') {
 
 
 /**
- * Create a calendar event with Google Meet link
+ * Create a calendar event (without video conference link)
+ * Video conference (Jitsi) is handled separately
  * @param {number} userId - User ID
  * @param {Object} eventData - Event data
  * @param {string} eventData.summary - Event title
@@ -192,7 +193,7 @@ async function getCalendarTokens(userId, role = 'mentor') {
  * @param {Date} eventData.start - Start date/time
  * @param {Date} eventData.end - End date/time
  * @param {Array<string>} eventData.attendees - Array of attendee emails
- * @returns {Promise<Object>} Created event with Meet link
+ * @returns {Promise<Object>} Created event
  */
 async function createCalendarEvent(userId, eventData, role = 'mentor') {
   try {
@@ -231,32 +232,18 @@ async function createCalendarEvent(userId, eventData, role = 'mentor') {
       }
     };
 
-    // If existing conference data is provided, use it. Otherwise create new Meet link.
-    if (eventData.conferenceData) {
-      event.conferenceData = eventData.conferenceData;
-    } else {
-      event.conferenceData = {
-        createRequest: {
-          requestId: `meet-${Date.now()}`,
-          conferenceSolutionKey: {
-            type: 'hangoutsMeet'
-          }
-        }
-      };
-    }
+    // Note: Google Meet link generation removed - using Jitsi Meet instead
+    // Calendar events are created without video conference link
+    // Jitsi room URL is generated separately and stored in booking.meeting_link
 
     const response = await calendar.events.insert({
       calendarId: 'primary',
-      conferenceDataVersion: 1,
       requestBody: event
     });
-
-    const meetLink = response.data.hangoutLink || response.data.conferenceData?.entryPoints?.[0]?.uri;
 
     return {
       success: true,
       eventId: response.data.id,
-      meetLink: meetLink,
       htmlLink: response.data.htmlLink,
       event: response.data
     };

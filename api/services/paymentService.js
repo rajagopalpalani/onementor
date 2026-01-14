@@ -856,10 +856,41 @@ async function handleWebhook(webhookData) {
 
             const timeSlotsList = slotsData.map(s => `${s.start_time} - ${s.end_time}`);
 
-            // 3. Create Google Calendar Events (Separate event per slot)
+            // 3. Generate Jitsi Meet Room (reuse existing if available)
+            const jitsiService = require('../services/jitsiService');
+            
+            // Create date objects for first and last slot
+            const firstSlotStart = new Date(`${firstSlot.date.toISOString().split('T')[0]}T${firstSlot.start_time}`);
+            const lastSlotEnd = new Date(`${lastSlot.date.toISOString().split('T')[0]}T${lastSlot.end_time}`);
+
+            // Check if meeting_link already exists (to ensure same room for user and mentor)
+            let existingRoomName = null;
+            if (booking.meeting_link) {
+              existingRoomName = jitsiService.extractRoomNameFromUrl(booking.meeting_link);
+            }
+
+            // Generate Jitsi room (using student info as primary user)
+            // Will reuse existing room name if available to ensure consistency
+            const jitsiRoom = jitsiService.createJitsiRoom({
+              bookingId: booking.id,
+              startDateTime: firstSlotStart,
+              endDateTime: lastSlotEnd,
+              user: {
+                id: booking.user_id,
+                name: student.name,
+                email: student.email,
+                role: 'user'
+              },
+              existingRoomName: existingRoomName // Use existing room if available
+            });
+
+            const jitsiMeetingLink = jitsiRoom.jitsiUrl;
+
+            // 4. Create Google Calendar Events (Separate event per slot, without Meet link)
             const calendarService = require('../services/calendarService');
-            let sharedMeetLink = null;
-            let sharedConferenceData = null;
+            
+            // Add Jitsi link to calendar event description
+            const jitsiLinkInDescription = `\n\nJoin Session: ${jitsiMeetingLink}`;
 
             for (let i = 0; i < slotsData.length; i++) {
               const slot = slotsData[i];
@@ -868,79 +899,61 @@ async function handleWebhook(webhookData) {
 
               const eventData = {
                 summary: `Mentorship Session: ${student.name} with ${mentor.name}`,
-                description: `OneMentor Session.\n\nStudent: ${student.name}\nMentor: ${mentor.name}\n\n Slot: ${slot.start_time} - ${slot.end_time}\nTotal Slots in this booking: ${slotsData.length}`,
+                description: `OneMentor Session.\n\nStudent: ${student.name}\nMentor: ${mentor.name}\n\n Slot: ${slot.start_time} - ${slot.end_time}\nTotal Slots in this booking: ${slotsData.length}${jitsiLinkInDescription}`,
                 start: slotStart,
                 end: slotEnd,
                 attendees: [student.email, mentor.email]
               };
 
-              // If we already have conference data from the first slot, reuse it
-              if (sharedConferenceData) {
-                eventData.conferenceData = sharedConferenceData;
-              }
-
               try {
-                let calendarResult = null;
                 if (mentor.google_calendar_refresh_token) {
-                  calendarResult = await calendarService.createCalendarEvent(booking.mentor_id, eventData, 'mentor');
+                  await calendarService.createCalendarEvent(booking.mentor_id, eventData, 'mentor');
                 } else if (student.google_calendar_refresh_token) {
-                  calendarResult = await calendarService.createCalendarEvent(booking.user_id, eventData, 'user');
-                }
-
-                if (calendarResult && calendarResult.meetLink) {
-                  // Capture the meet link and conference data from the first successful creation
-                  if (!sharedMeetLink) {
-                    sharedMeetLink = calendarResult.meetLink;
-                    // Extract conferenceData to reuse for other slots
-                    // response.data from google api contains conferenceData
-                    sharedConferenceData = {
-                      conferenceId: calendarResult.event.conferenceData.conferenceId,
-                      entryPoints: calendarResult.event.conferenceData.entryPoints,
-                      conferenceSolution: calendarResult.event.conferenceData.conferenceSolution
-                    };
-                  }
+                  await calendarService.createCalendarEvent(booking.user_id, eventData, 'user');
                 }
               } catch (calErr) {
                 console.error(`Error creating calendar event for slot ${i}:`, calErr);
               }
             }
 
-            if (sharedMeetLink) {
-              console.log("Google Meet Link Shared across slots:", sharedMeetLink);
+            // 5. Update Booking with Jitsi Meeting Link
+            await connection.query(
+              `UPDATE bookings SET meeting_link = ? WHERE id = ?`,
+              [jitsiMeetingLink, booking.id]
+            );
 
-              // 4. Update Booking with Meet Link
-              await connection.query(
-                `UPDATE bookings SET meeting_link = ? WHERE id = ?`,
-                [sharedMeetLink, booking.id]
-              );
+            console.log("Jitsi Meeting Link generated:", jitsiMeetingLink);
 
-              // 5. Send Email (One summary email for all slots)
-              const { sendEmail } = require('../services/mailer');
-              const { generateSessionConfirmationEmail } = require('../utils/emailTemplates/sessionConfirmation');
+            // 6. Send Email (One summary email for all slots)
+            const { sendEmail } = require('../services/mailer');
+            const { generateSessionConfirmationEmail } = require('../utils/emailTemplates/sessionConfirmation');
 
-              const emailContent = generateSessionConfirmationEmail({
-                studentName: student.name,
-                mentorName: mentor.name,
-                date: slotsData[0].date.toDateString(),
-                timeSlots: timeSlotsList,
-                meetLink: sharedMeetLink,
-                amount: booking.amount
-              });
+            // Generate internal meeting page URL (will be created in frontend)
+            const baseUrl = process.env.FRONTEND_URL || process.env.API_BASE_URL?.replace('/api', '') || 'http://localhost:3000';
+            const meetingPageUrl = `${baseUrl}/dashboard/userdashboard/meeting/${booking.id}`;
 
-              await sendEmail({
-                to: student.email,
-                subject: emailContent.subject,
-                html: emailContent.html
-              });
+            const emailContent = generateSessionConfirmationEmail({
+              studentName: student.name,
+              mentorName: mentor.name,
+              date: slotsData[0].date.toDateString(),
+              timeSlots: timeSlotsList,
+              meetLink: meetingPageUrl, // Use internal meeting page URL
+              amount: booking.amount
+            });
 
-              await sendEmail({
-                to: mentor.email,
-                subject: emailContent.subject,
-                html: emailContent.html
-              });
+            await sendEmail({
+              to: student.email,
+              subject: emailContent.subject,
+              html: emailContent.html
+            });
 
-              console.log("Confirmation emails sent.");
-            }
+            await sendEmail({
+              to: mentor.email,
+              subject: emailContent.subject,
+              html: emailContent.html
+            });
+
+            console.log("Confirmation emails sent.");
           }
         }
         // --- CALENDAR & EMAIL INTEGRATION END ---

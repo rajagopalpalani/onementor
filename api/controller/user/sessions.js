@@ -356,31 +356,48 @@ exports.getMeetingDetails = async (req, res) => {
     const endDateTime = formatDate(lastSlot.date, lastSlot.end_time);
     const now = new Date();
 
-    // Allow joining 10 minutes before
-    const allowJoinTime = new Date(startDateTime.getTime() - 10 * 60000);
+    // Development mode: bypass time validation for testing
+    // Set ENABLE_MEETING_TIME_VALIDATION=false in .env to disable time checks
+    const enableTimeValidation = process.env.ENABLE_MEETING_TIME_VALIDATION !== 'false';
 
-    // Time validation - prevent joining after session end
-    if (now > endDateTime) {
-      return res.json({
-        success: false,
-        status: 'ended',
-        message: "This session has ended. You cannot join after the session end time."
-      });
-    } else if (now >= allowJoinTime) {
-      // Live - allow joining
+    if (enableTimeValidation) {
+      // Allow joining 10 minutes before
+      const allowJoinTime = new Date(startDateTime.getTime() - 10 * 60000);
+
+      // Time validation - prevent joining after session end
+      if (now > endDateTime) {
+        return res.json({
+          success: false,
+          status: 'ended',
+          message: "This session has ended. You cannot join after the session end time."
+        });
+      } else if (now >= allowJoinTime) {
+        // Live - allow joining
+      } else {
+        return res.json({
+          success: false,
+          status: 'upcoming',
+          startTime: startDateTime,
+          message: "Session has not started yet. You can join 10 minutes before start."
+        });
+      }
     } else {
-      return res.json({
-        success: false,
-        status: 'upcoming',
-        startTime: startDateTime,
-        message: "Session has not started yet. You can join 10 minutes before start."
-      });
+      // Development mode: allow joining regardless of time
+      console.log('⚠️  Development mode: Time validation disabled for testing');
     }
 
-    // Generate Jitsi room details with JWT token
+    // Generate Jitsi room details - ensure same room for user and mentor
     const jitsiService = require('../../services/jitsiService');
     const isMentor = String(booking.mentor_id) === String(user_id);
     
+    // Check if meeting_link already exists in database (from previous generation)
+    let existingRoomName = null;
+    if (booking.meeting_link) {
+      // Extract room name from existing meeting link
+      existingRoomName = jitsiService.extractRoomNameFromUrl(booking.meeting_link);
+    }
+    
+    // Create Jitsi room - will use existing room name if available, otherwise generate deterministic one
     const jitsiRoom = jitsiService.createJitsiRoom({
       bookingId: booking.id,
       startDateTime: startDateTime,
@@ -390,12 +407,28 @@ exports.getMeetingDetails = async (req, res) => {
         name: isMentor ? booking.mentor_name : booking.student_name,
         email: isMentor ? booking.mentor_email : booking.student_email,
         role: isMentor ? 'mentor' : 'user'
-      }
+      },
+      existingRoomName: existingRoomName // Use existing room name if available
     });
+    
+    // Store meeting_link in database if it doesn't exist or needs update
+    // This ensures both user and mentor use the same room
+    if (!booking.meeting_link || existingRoomName !== jitsiRoom.roomName) {
+      try {
+        await db.query(
+          'UPDATE bookings SET meeting_link = ? WHERE id = ?',
+          [jitsiRoom.jitsiUrl, booking.id]
+        );
+      } catch (updateErr) {
+        console.error('Error updating meeting_link:', updateErr);
+        // Don't fail the request if update fails, just log it
+      }
+    }
 
     const userInfo = {
       displayName: isMentor ? booking.mentor_name : booking.student_name,
       email: isMentor ? booking.mentor_email : booking.student_email,
+      role: isMentor ? 'mentor' : 'user'
     };
 
     res.json({

@@ -31,10 +31,10 @@ const generateSessionConfirmationEmail = ({
   
             <div style="text-align: center; margin: 30px 0;">
               <a href="${meetLink}" style="background-color: #2563EB; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-                Join Google Meet
+                Join Session
               </a>
               <p style="margin-top: 12px; font-size: 14px; color: #666;">
-                 Or copy link: <a href="${meetLink}" style="color: #2563EB;">${meetLink}</a>
+                 Click the button above to join your session, or copy this link: <a href="${meetLink}" style="color: #2563EB;">${meetLink}</a>
               </p>
             </div>
   
