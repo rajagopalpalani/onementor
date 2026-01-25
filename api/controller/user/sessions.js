@@ -48,8 +48,11 @@ exports.getUpcomingSessions = async (req, res) => {
         TIME_FORMAT(ms.end_time, '%H:%i:%s') AS endTime,
         b.notes,
         b.status,
-        b.amount AS total_amount,
+        b.notes,
+        b.status,
+        b.total_amount,
         ms.amount AS slot_amount,
+        b.payment_status,
         b.payment_status,
         b.meeting_link,
         m.name AS coachName,
@@ -62,12 +65,12 @@ exports.getUpcomingSessions = async (req, res) => {
       LEFT JOIN mentor_profiles mp ON mp.user_id = b.mentor_id
       WHERE 
         b.user_id = ?
-        AND b.status IN ('confirmed', 'completed')
+        AND b.status IN ('confirmed')
         AND (
           ms.date > CURDATE()
           OR (
             ms.date = CURDATE()
-            AND ms.start_time > CURTIME()
+            AND ms.end_time >= CURTIME()
           )
         )
       ORDER BY ms.date ASC, ms.start_time ASC
@@ -86,6 +89,7 @@ exports.getUpcomingSessions = async (req, res) => {
       sessionType: s.sessionType || "General Coaching",
       description: s.notes,
       status: s.status,
+      paymentStatus: s.payment_status,
       paymentStatus: s.payment_status,
       amount: s.slot_amount || (s.total_amount / (sessions.filter(x => x.booking_id === s.booking_id).length || 1)),
       coachBio: s.coachBio,
@@ -125,8 +129,11 @@ exports.getSessionHistory = async (req, res) => {
         TIME_FORMAT(ms.end_time, '%H:%i:%s') AS endTime,
         b.notes,
         b.status,
-        b.amount AS total_amount,
+        b.notes,
+        b.status,
+        b.total_amount,
         ms.amount AS slot_amount,
+        b.payment_status,
         b.payment_status,
         b.meeting_link,
         b.created_at,
@@ -140,13 +147,15 @@ exports.getSessionHistory = async (req, res) => {
       LEFT JOIN mentor_profiles mp ON mp.user_id = b.mentor_id
       WHERE 
         b.user_id = ?
-        AND b.status IN ('confirmed', 'completed')
         AND (
-          ms.date < CURDATE()
-          OR (
-            ms.date = CURDATE()
-            AND ms.end_time < CURTIME()
+          (
+            b.status = 'confirmed'
+            AND (
+              ms.date < CURDATE()
+              OR (ms.date = CURDATE() AND ms.end_time < CURTIME())
+            )
           )
+          OR b.status IN ('completed', 'cancelled')
         )
       ORDER BY ms.date DESC, ms.start_time DESC
       LIMIT ? OFFSET ?
@@ -192,7 +201,8 @@ exports.getSessionHistory = async (req, res) => {
       amount: s.slot_amount || (s.total_amount / (sessions.filter(x => x.booking_id === s.booking_id).length || 1)),
       coachBio: s.coachBio,
       createdAt: s.created_at,
-      meetingLink: s.meeting_link
+      meetingLink: s.meeting_link,
+      user_completed: s.user_completed // Include user completion status
     }));
 
     res.json({
@@ -271,5 +281,55 @@ exports.getUserStats = async (req, res) => {
   } catch (err) {
     console.error("User stats error:", err);
     res.status(500).json({ error: err.message });
+  }
+};
+
+/* ===========================
+   MARK SESSION AS COMPLETED (USER)
+=========================== */
+exports.markSessionComplete = async (req, res) => {
+  let connection;
+  try {
+    const { booking_id } = req.params;
+    const { user_id } = req.body; // Expect user_id in body for security/validation
+
+    if (!booking_id || !user_id) {
+      return res.status(400).json({ error: "Booking ID and User ID required" });
+    }
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    // Update user_completed
+    const [result] = await connection.query(
+      "UPDATE bookings SET user_completed = 1, user_completed_at = NOW() WHERE id = ? AND user_id = ?",
+      [booking_id, user_id]
+    );
+
+    if (result.affectedRows === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: "Booking not found or not belonging to user" });
+    }
+
+    // Check if mentor also completed
+    const [rows] = await connection.query("SELECT mentor_completed FROM bookings WHERE id = ?", [booking_id]);
+
+    if (rows.length > 0 && rows[0].mentor_completed) {
+      // Both completed -> Mark as COMPLETED and Payout Status
+      await connection.query(
+        "UPDATE bookings SET status = 'completed', completed_at = NOW(), payout_status = 'ready_for_payout' WHERE id = ?",
+        [booking_id]
+      );
+    }
+
+    await connection.commit();
+    res.json({ success: true, message: "Session marked as completed by user" });
+
+  } catch (err) {
+    if (connection) await connection.rollback();
+    console.error("Mark complete error:", err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    if (connection) connection.release();
   }
 };

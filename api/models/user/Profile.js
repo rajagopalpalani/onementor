@@ -73,10 +73,47 @@ const saveProfile = async (user_id, skills, interests, resumePath) => {
 
 const getProfile = async (user_id) => {
   const [rows] = await db.query(
-    "SELECT * FROM user_profiles WHERE user_id = ?",
+    `SELECT 
+      u.id as user_id,
+      u.name,
+      u.email,
+      u.phone,
+      up.id as profile_id,
+      up.skills,
+      up.interests,
+      up.resume,
+      up.created_at,
+      up.updated_at
+    FROM users u
+    LEFT JOIN user_profiles up ON u.id = up.user_id
+    WHERE u.id = ?`,
     [user_id]
   );
-  return rows[0] || null;
+  
+  if (rows.length === 0) {
+    return null;
+  }
+  
+  const profile = rows[0];
+  
+  // Parse JSON fields if they exist
+  if (profile.skills) {
+    try {
+      profile.skills = typeof profile.skills === 'string' ? JSON.parse(profile.skills) : profile.skills;
+    } catch (e) {
+      // Keep as string if parsing fails
+    }
+  }
+  
+  if (profile.interests) {
+    try {
+      profile.interests = typeof profile.interests === 'string' ? JSON.parse(profile.interests) : profile.interests;
+    } catch (e) {
+      // Keep as string if parsing fails
+    }
+  }
+  
+  return profile;
 };
 
 module.exports = { saveProfile, getProfile };

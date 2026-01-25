@@ -118,3 +118,22 @@ export async function getUserStats(userId) {
     return { error: "Network error" };
   }
 }
+// Mark session as complete (User)
+export async function markSessionComplete(bookingId, userId) {
+  try {
+    const res = await fetch(`${API_URL}user/sessions/complete/${bookingId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ user_id: userId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { error: data.error || 'Failed to mark session as complete' };
+    }
+    return data;
+  } catch (err) {
+    console.error('markSessionComplete error', err);
+    return { error: 'Network error' };
+  }
+}

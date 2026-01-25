@@ -144,10 +144,11 @@ router.post("/vpa", async (req, res) => {
 
     // Generate consistent customerId using utility function
     const customerId = generateCustomerId(mentor_id, user.email);
+    console.log("customerId", user);
 
     // Validate VPA using JUSPAY payout API or mock based on env
     let validationResult;
-    if (false) {
+    if (true) {
       const { validateVPA } = require("../../services/paymentService");
       validationResult = await validateVPA({
         vpa: vpa,

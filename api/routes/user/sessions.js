@@ -80,4 +80,6 @@ router.get("/upcoming/:user_id", sessionsController.getUpcomingSessions);
 router.get("/history/:user_id", sessionsController.getSessionHistory);
 router.get("/stats/:user_id", sessionsController.getUserStats);
 
+router.put("/complete/:booking_id", sessionsController.markSessionComplete);
+
 module.exports = router;

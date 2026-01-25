@@ -14,7 +14,14 @@ const db = require("../config/mysql");
  *     summary: Create booking and payout order to transfer money to mentor
  *     description: Creates a booking record and JUSPAY payout order. Booking status remains 'pending' until payment is completed via /api/payment/session endpoint.
  *     tags: [Payment]
- *     requestBody:
+ */
+const PLATFORM_FEE = 2;
+
+/**
+ * @swagger
+ * /api/payment/payout:
+ *   post:
+ *     summary: Create booking and payout order to transfer money to mentor
  *       required: true
  *       content:
  *         application/json:
@@ -161,6 +168,12 @@ router.post("/payout", async (req, res) => {
       remark
     } = req.body;
 
+    // Calculate fees
+    // 'amount' from body is Total Amount paid by user.
+    // Mentor receives: Total - Platform Fee
+    const session_fee = Number(amount) - PLATFORM_FEE;
+    const platform_fee = PLATFORM_FEE;
+
     // Support both single slot_id (backward compatibility) and array slot_ids
     const slotIdsArray = Array.isArray(slot_ids) ? slot_ids : (slot_ids ? [slot_ids] : []);
 
@@ -303,7 +316,7 @@ router.post("/payout", async (req, res) => {
         success: true,
         orderId: payoutOrderId,
         status: 'CREATED',
-        amount: amount,
+        amount: session_fee,
         responseData: {
           mock: true,
           message: "Internal testing - Juspay skipped"
@@ -326,8 +339,8 @@ router.post("/payout", async (req, res) => {
     const [bookingResult] = await connection.query(
       `INSERT INTO bookings 
        (user_id, mentor_id, slots, status, session_date, session_start_time, session_end_time, 
-        amount, payment_status, payout_order_id, payout_order_status, payout_order_data, notes)
-       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
+        total_amount, session_amount, platform_fee, payment_status, payout_order_id, payout_order_status, payout_order_data, notes)
+       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
       [
         user_id,
         mentor_id,
@@ -335,7 +348,9 @@ router.post("/payout", async (req, res) => {
         firstSlot.date,
         firstSlot.start_time,
         lastSlot.end_time,
-        amount,
+        amount, // total_amount
+        session_fee, // session_amount
+        platform_fee,
         payoutResult.orderId || payoutOrderId,
         payoutResult.status || 'CREATED',
         JSON.stringify(payoutResult.responseData || {}),
@@ -348,7 +363,7 @@ router.post("/payout", async (req, res) => {
     // Fetch updated booking with order information (before commit)
     const [updatedBooking] = await connection.query(
       `SELECT id, user_id, mentor_id, slots, status, session_date, session_start_time, 
-              session_end_time, amount, payment_status, payout_order_id, payout_order_status, 
+              session_end_time, total_amount as amount, payment_status, payout_order_id, payout_order_status, 
               payout_order_data, created_at, updated_at
        FROM bookings WHERE id = ?`,
       [bookingId]
@@ -487,6 +502,9 @@ router.post("/booking-session", async (req, res) => {
       return_url
     } = req.body;
 
+    const session_fee = Number(amount) - PLATFORM_FEE;
+    const platform_fee = PLATFORM_FEE;
+
     const slotIdsArray = Array.isArray(slot_ids) ? slot_ids : (slot_ids ? [slot_ids] : []);
 
     if (!user_id || !mentor_id || slotIdsArray.length === 0 || !amount) {
@@ -540,8 +558,8 @@ router.post("/booking-session", async (req, res) => {
     const [bookingResult] = await connection.query(
       `INSERT INTO bookings 
        (user_id, mentor_id, slots, status, session_date, session_start_time, session_end_time, 
-        amount, payment_status, payout_order_id, payout_order_status, notes)
-       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, 'pending', ?, 'NEW', ?)`,
+        total_amount, session_amount, platform_fee, payment_status, payout_order_id, payout_order_status, notes)
+       VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, 'pending', ?, 'NEW', ?)`,
       [
         user_id,
         mentor_id,
@@ -550,6 +568,8 @@ router.post("/booking-session", async (req, res) => {
         firstSlot.start_time,
         lastSlot.end_time,
         amount,
+        session_fee,
+        platform_fee,
         orderId, // Store BOOK_ order id in payout_order_id for compatibility
         remark || null
       ]
@@ -745,7 +765,7 @@ router.post("/session", async (req, res) => {
         b.id,
         b.user_id,
         b.mentor_id,
-        b.amount,
+        b.total_amount as amount,
         b.payout_order_id,
         b.payout_order_status,
         b.payment_status,
@@ -797,7 +817,7 @@ router.post("/session", async (req, res) => {
     if (useJuspay) {
       sessionResult = await createPaymentSession({
         order_id: booking.payout_order_id, // Use payout_order_id as order_id
-        amount: booking.amount.toString(),
+        amount: booking.amount.toString(), // Booking.amount is now total_amount aliased
         customer_id: customerId,
         customer_email: booking.user_email,
         customer_phone: booking.user_phone || '',

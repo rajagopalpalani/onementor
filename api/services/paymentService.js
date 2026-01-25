@@ -1,17 +1,17 @@
 const axios = require('axios');
 const crypto = require('crypto');
 const db = require('../config/mysql');
+const { log } = require('console');
 
 // JUSPAY Configuration
 const JUSPAY_MERCHANT_ID = 'ONEMENTORS';
 const JUSPAY_API_KEY = '68757B44F6447DE8D36E9C484504B2'
-//'770CA820CB74397AD51087EC5CA9F0';
 const JUSPAY_CLIENT_ID = 'MIIEpQIBAAKCAQEA2R+5+b1HZSNNMotnr7Z/5By4NSTZW4dDMGDy2huOSLn1EF6v75sssdY5kRkFoihLIeNQA+yzsi0kzpz3rCCCmo1DJwgoqA48JVQwwBjZ9SHeC0nE66VODmMJJGNWe1quHWQb3otIzS+U+rtd1Alzo9up8u8e+FrecyjO6fBMZfd32iO7qPtExtA1XDtKMqoRbHMiAz940xA5+BLmJC+gp1IYsVce2KA5BW1laPxbku42aQR7eZipSa3BYRY8m964Aj6vLj4kTeTbrc4OH7yatRdWbVbrwVWpg936g8Q3Qf3jQY+HMu76l1WeXK4GkPkA+oJXY6ag1XhhqtOrLw3rJwIDAQABAoIBAQCjy2thG4lgouD54HC3/dU9IO1WKhZPFht5w6lxIJiWBLL7RnMzLrzo69NBwr6dNgh36CPU0hw9rhC2TXQKRfxA25BtQZpqLVLyVjDwuc6zPnljyqLjojDgaZXb/ZSgOihfw8XCfRDOubaJ8A84hmjWlEABJKMYeHSYK5Dsqnr37/Oj4OT2NWLaRx8Kk0HPuv/bxx3MHurIHRtG514UJZcOfN8Ti69/DoYbtb/Mpg/djXr5s47TafxPa8jyT2E8nWboPvYPDQcdu2CIE0mbrj2C0Ak7g20ZYzm9HCbJHVG+2rPSjVgXKW2ZgXoZflte+G5vRfDrZH+TZuo+ja0pVlIBAoGBAP4ZEtdpRJp5kvj7bUIkXd5E6lrxd2M0VprfMhHk0i+Z1p1nF8StF6p9uIGuRIEthvdRZVy56fWCHXOfmquRJDHazQZVnnXcRaqhuMYdZoJ3i1KkmSL4X/SdBsB4rY4FQZWNtwKoSeDugQeJzf4bhyn0iZGbWPq+XO70MxXya8CfAoGBANq/zL6ul+G6i/nXrfzwUr83EtXh6Zoj51YBK4g3ZIIuWkWvbo9NguV3p9KmeRKMWwYORHC7aVwpHdjzOyzmSFdmC+5dqVe6rkdl9AzxpKt0p0rOznmZUhDcdElCk0p6pC5RQDAt2PA4aR3kT+9z2dPV0IHsUGiouF/LtmTmdCB5AoGAIShUdRefhCjpLORiVYc5WI/VpRhtY9yokH0fo4Ygh2Wjw9Z4G4oa1HyjXwjGl7TBL/THLVp1VTwta7EgFdNSzc6ngnQZwXeE/8cqvW+IuO2wmJAyC4Ytv1XeU69rtmSpMkLT5tzfByMYY0twPgCJmsf2S7Hh4paEugnTwMFpnjECgYEAoTqc/i5RY97LLOr7ImM/mhBNobdRJnswFwPlwhCR1CG2B4a2Rokq4VbAK1LoCfPJYz1A1JZNoc/sX+tmwkE5MLHWOWpvVmoR6i4LIz83z+e7JjgnlxialDLowtZ/GXYrbLgWR2yDaQsq7w1InYUWGDyP4jL7USiKPJE5bkUtcoECgYEAwhbb1NxzteIr8zlytMj52sgeiJPQRjbU5CoMAJuiHvYHT8jQwso7lfbz+fXdQamU29v1Hdhc2JR1xWxrTz4bAt1l9lWK8zQBTK3SOlhyvrvNkKtTwjansR6+uwB9KY5mrF++pRA8IL2f0yhx2uqwDkX/Og6ZnFHJn3BvQM/DWPg=';
 const JUSPAY_BASE_URL = 'https://sandbox.juspay.in';
 const JUSPAY_SANDBOX_URL = 'https://sandbox.juspay.in';
 const JUSPAY_RETURN_URL = process.env.FRONTEND_URL + '/payment/callback' || 'http://localhost:3000/payment/callback';
 const JUSPAY_PAYOUT_BASE_URL = JUSPAY_SANDBOX_URL; // Use sandbox for payout API
-
+const JUSPAY_PAYOUT_KEY = process.env.JUSPAY_PAYOUT_KEY
 /**
  * Validate VPA (UPI ID) using JUSPAY payout API
  * @param {Object} vpaData - VPA validation details
@@ -49,11 +49,11 @@ async function validateVPA(vpaData) {
     // Generate unique beneficiary ID if not provided
     // Use customerId to derive a unique beneId to ensure consistency
     const finalCustomerId = customerId || `customer_${Date.now()}`;
-    const finalBeneId = beneId || finalCustomerId.replace('customer_', 'bene_');
+    const finalBeneId = finalCustomerId.replace('customer_', `bene_${Date.now()}`);
 
     // Prepare request payload
     const payload = {
-      command: 'CREATE',
+      command: 'VALIDATE',
       customerId: finalCustomerId,
       email: email,
       phone: formattedPhone,
@@ -69,7 +69,7 @@ async function validateVPA(vpaData) {
 
     // Make API call to JUSPAY payout API
     // Basic Auth format: Username = API Key, Password = Empty string
-    const authHeader = `Basic ${Buffer.from(JUSPAY_API_KEY + ':').toString('base64')}`;
+    const authHeader = `Basic ${Buffer.from(JUSPAY_PAYOUT_KEY + ':').toString('base64')}`;
     console.log(authHeader, JUSPAY_PAYOUT_BASE_URL, payload);
 
     const response = await axios.post(
@@ -83,6 +83,7 @@ async function validateVPA(vpaData) {
         }
       }
     );
+    console.log(response.data, '1111');
 
     if (response.data && response.data.status === 'VALID') {
       return {
@@ -478,7 +479,19 @@ async function createRegistrationFeeSession(sessionData) {
           return acc;
         }, {})
       }),
-      "payment_filter": { "allowDefaultOptions": false, "options": [{ "paymentMethodType": "UPI", "enable": true }, { "paymentMethodType": "CARD", "enable": true }] }
+      "payment_filter": {
+        "allowDefaultOptions": false,
+        "options": [
+          {
+            "paymentMethodType": "CARD",
+            "enable": true
+          },
+          {
+            "paymentMethodType": "NB",
+            "enable": true
+          }
+        ]
+      }
     };
 
     console.log("JUSPAY Registration Session Request Payload:", JSON.stringify(payload, null, 2));
@@ -661,26 +674,45 @@ async function handleWebhook(webhookData) {
     }
 
     // Extract order_id from order data (could be in different fields)
-    const orderId = orderData.order_id || orderData.id || webhookData.order_id || webhookData.id;
-    const status = orderData.status || webhookData.status;
+    // Handle both event-based webhook (content.order.order_id) and direct order webhook
+    const orderId = orderData.order_id || 
+                   orderData.id || 
+                   webhookData.content?.order?.order_id ||
+                   webhookData.content?.order?.id ||
+                   webhookData.order_id || 
+                   webhookData.id;
+    
+    // Extract status - ORDER_SUCCEEDED has status "CHARGED", ORDER_FAILED has status "AUTHORIZATION_FAILED" or "FAILED"
+    const status = orderData.status || 
+                   webhookData.content?.order?.status ||
+                   webhookData.status;
+    
     const paymentStatus = orderData.payment_status || status;
-    const txnId = orderData.txn_id || orderData.txn_detail?.txn_id;
-    const amount = orderData.amount || orderData.effective_amount;
-    const currency = orderData.currency || 'INR';
+    const txnId = orderData.txn_id || 
+                  orderData.txn_detail?.txn_id ||
+                  webhookData.content?.order?.txn_id;
+    const amount = orderData.amount || 
+                  orderData.effective_amount ||
+                  webhookData.content?.order?.amount ||
+                  webhookData.content?.order?.effective_amount;
+    const currency = orderData.currency || 
+                    webhookData.content?.order?.currency ||
+                    'INR';
 
     if (!orderId) {
       await connection.rollback();
+      console.error('[Webhook] order_id not found in payload:', JSON.stringify(webhookData, null, 2));
       return {
         success: false,
         error: 'order_id not found in webhook payload'
       };
     }
 
-    console.log(`Processing webhook for order_id: ${orderId}, status: ${status}`);
+    console.log(`[Webhook] Processing for order_id: ${orderId}, event: ${eventName}, status: ${status}, payment_status: ${paymentStatus}`);
 
     // Find booking by payout_order_id
     const [bookings] = await connection.query(
-      `SELECT id, user_id, mentor_id, slots, payment_status, status, payout_order_id, amount
+      `SELECT id, user_id, mentor_id, slots, payment_status, status, payout_order_id, total_amount as amount
        FROM bookings
        WHERE payout_order_id = ?`,
       [orderId]
@@ -756,20 +788,43 @@ async function handleWebhook(webhookData) {
     let newBookingStatus = booking.status;
 
     // Handle different event types and statuses
-    if (eventName === 'ORDER_SUCCEEDED' || status === 'CHARGED' || status === 'SUCCESS' || paymentStatus === 'CHARGED') {
+    // ORDER_SUCCEEDED event or CHARGED status means payment successful
+    if (eventName === 'ORDER_SUCCEEDED' || 
+        status === 'CHARGED' || 
+        status === 'SUCCESS' || 
+        paymentStatus === 'CHARGED') {
       newPaymentStatus = 'paid';
       newBookingStatus = 'confirmed';
-    } else if (eventName === 'ORDER_FAILED' || status === 'FAILED' || paymentStatus === 'FAILED') {
+      console.log(`[Webhook] Payment succeeded for booking ${booking.id}`);
+    } 
+    // ORDER_FAILED event or AUTHORIZATION_FAILED/FAILED status means payment failed
+    else if (eventName === 'ORDER_FAILED' || 
+             status === 'AUTHORIZATION_FAILED' ||
+             status === 'FAILED' || 
+             paymentStatus === 'FAILED' ||
+             status === 'AUTHORIZATION_FAILED') {
       newPaymentStatus = 'failed';
       newBookingStatus = 'cancelled';
-    } else if (eventName === 'ORDER_CANCELLED' || status === 'CANCELLED') {
+      console.log(`[Webhook] Payment failed for booking ${booking.id}, status: ${status}`);
+    } 
+    else if (eventName === 'ORDER_CANCELLED' || status === 'CANCELLED') {
       newPaymentStatus = 'failed';
       newBookingStatus = 'cancelled';
-    } else if (eventName === 'ORDER_REFUNDED' || status === 'REFUNDED' || paymentStatus === 'REFUNDED') {
+      console.log(`[Webhook] Order cancelled for booking ${booking.id}`);
+    } 
+    else if (eventName === 'ORDER_REFUNDED' || status === 'REFUNDED' || paymentStatus === 'REFUNDED') {
       newPaymentStatus = 'refunded';
       newBookingStatus = 'cancelled';
-    } else if (status === 'PENDING' || status === 'NEW') {
+      console.log(`[Webhook] Order refunded for booking ${booking.id}`);
+    } 
+    else if (status === 'PENDING' || status === 'NEW') {
       // Keep current status for pending orders
+      newPaymentStatus = booking.payment_status;
+      newBookingStatus = booking.status;
+      console.log(`[Webhook] Order still pending for booking ${booking.id}`);
+    } else {
+      // Unknown status - log but don't update
+      console.warn(`[Webhook] Unknown status for booking ${booking.id}: ${status}, event: ${eventName}`);
       newPaymentStatus = booking.payment_status;
       newBookingStatus = booking.status;
     }
@@ -800,35 +855,37 @@ async function handleWebhook(webhookData) {
       ]
     );
 
-    // Only mark slots as booked if payment is successful
-    if (newPaymentStatus === 'paid' && newBookingStatus === 'confirmed') {
-      // Parse slots JSON array
-      let slotIds = [];
-      if (booking.slots) {
-        if (typeof booking.slots === 'string') {
-          try {
-            slotIds = JSON.parse(booking.slots);
-          } catch (e) {
-            console.error('Error parsing slots JSON:', e);
-            slotIds = [];
-          }
-        } else if (Array.isArray(booking.slots)) {
-          slotIds = booking.slots;
+    // Handle slots based on payment status
+    let slotIds = [];
+    if (booking.slots) {
+      if (typeof booking.slots === 'string') {
+        try {
+          slotIds = JSON.parse(booking.slots);
+        } catch (e) {
+          console.error('Error parsing slots JSON:', e);
+          slotIds = [];
         }
+      } else if (Array.isArray(booking.slots)) {
+        slotIds = booking.slots;
       }
+    }
 
-      // Mark all slots as booked
+    // Create placeholders for slot queries (used in multiple places)
+    const placeholders = slotIds.length > 0 ? slotIds.map(() => '?').join(',') : '';
+
+    // Mark slots as booked if payment is successful
+    if (newPaymentStatus === 'paid' && newBookingStatus === 'confirmed') {
       if (slotIds.length > 0) {
-        const placeholders = slotIds.map(() => '?').join(',');
         const [updateResult] = await connection.query(
           `UPDATE mentor_slots 
            SET is_booked = 1, updated_at = CURRENT_TIMESTAMP
            WHERE id IN (${placeholders}) AND is_booked = 0`,
           slotIds
         );
-        console.log(`Marked ${updateResult.affectedRows} slot(s) as booked`);
+        console.log(`[Webhook] Marked ${updateResult.affectedRows} slot(s) as booked for booking ${booking.id}`);
+      }
 
-        // --- CALENDAR & EMAIL INTEGRATION START ---
+      // --- CALENDAR & EMAIL INTEGRATION START ---
 
         // 1. Fetch User and Mentor Details
         const [userDetails] = await connection.query(
@@ -840,7 +897,7 @@ async function handleWebhook(webhookData) {
           [booking.mentor_id]
         );
 
-        if (userDetails.length && mentorDetails.length) {
+        if (userDetails.length && mentorDetails.length && slotIds.length > 0) {
           const student = userDetails[0];
           const mentor = mentorDetails[0];
 
@@ -943,7 +1000,18 @@ async function handleWebhook(webhookData) {
             }
           }
         }
-        // --- CALENDAR & EMAIL INTEGRATION END ---
+      // --- CALENDAR & EMAIL INTEGRATION END ---
+    } 
+    // Unbook slots if payment failed (only if they were previously booked by this booking)
+    else if (newPaymentStatus === 'failed' && newBookingStatus === 'cancelled') {
+      if (slotIds.length > 0 && placeholders) {
+        const [updateResult] = await connection.query(
+          `UPDATE mentor_slots 
+           SET is_booked = 0, updated_at = CURRENT_TIMESTAMP
+           WHERE id IN (${placeholders}) AND is_booked = 1`,
+          slotIds
+        );
+        console.log(`[Webhook] Unbooked ${updateResult.affectedRows} slot(s) due to payment failure for booking ${booking.id}`);
       }
     }
 

@@ -251,6 +251,19 @@ const ProfileForm = () => {
       return;
     }
 
+    // Validate phone number (mandatory for mentor profile)
+    if (!formData.phone || formData.phone.trim() === "") {
+      toastrError("Phone number is required for mentor profile");
+      return;
+    }
+
+    // Validate phone number format
+    const phoneDigits = formData.phone.replace(/\D/g, '');
+    if (phoneDigits.length < 10) {
+      toastrError("Please enter a valid 10-digit phone number");
+      return;
+    }
+
     // Validate custom expertise if "other" is selected
     if (formData.expertise === "other") {
       if (!formData.customExpertise || formData.customExpertise.trim() === "") {
@@ -262,6 +275,7 @@ const ProfileForm = () => {
     const formDataObj = new FormData();
     formDataObj.append("user_id", userId);
     formDataObj.append("username", formData.name);
+    formDataObj.append("phone", formData.phone);
     // Use custom expertise if "other" is selected, otherwise convert short form to full text
     const categoryValue = formData.expertise === "other"
       ? formData.customExpertise.trim()
@@ -384,15 +398,21 @@ const ProfileForm = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number
+                  Phone Number <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type="text"
+                  type="tel"
+                  name="phone"
                   value={formData.phone}
-                  readOnly
-                  className="input-professional bg-gray-50 cursor-not-allowed"
-                  placeholder="Not provided"
+                  onChange={handleChange}
+                  className="input-professional"
+                  placeholder="10-digit mobile number (e.g., 9876543210)"
+                  required
+                  pattern="[0-9]{10,12}"
+                  minLength={10}
+                  maxLength={12}
                 />
+                <p className="text-xs text-gray-500 mt-1">Required for mentor profile. 10-digit number will be prefixed with +91.</p>
               </div>
 
               <div>

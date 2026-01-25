@@ -336,6 +336,12 @@ export default function CoachDashboard() {
               link="/dashboard/coachdashboard/livesession" 
             /> */}
             <Card
+              title="My Bookings"
+              description="View upcoming sessions and history"
+              icon={<CalendarIcon className="w-8 h-8" />}
+              link="/dashboard/coachdashboard/bookings"
+            />
+            <Card
               title="Track Earnings"
               description="Monitor your income and performance"
               icon={<ChartBarIcon className="w-8 h-8" />}

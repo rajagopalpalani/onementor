@@ -11,23 +11,71 @@ import { initiateGoogleLogin } from "@/services/auth/auth";
 import { toastrSuccess, toastrError } from "@/components/ui/toaster/toaster";
 import Loader from "@/components/ui/loader/loader";
 
+/**
+ * Format phone number: if 10 digits, prepend 91 (India country code)
+ * @param {string} phone - Phone number to format
+ * @returns {string} - Formatted phone number
+ */
+function formatPhoneNumber(phone) {
+  if (!phone) return '';
+  
+  // Remove all non-digit characters
+  const digitsOnly = phone.replace(/\D/g, '');
+  
+  // If empty after cleaning, return empty
+  if (!digitsOnly) return '';
+  
+  // If 10 digits, prepend 91
+  if (digitsOnly.length === 10) {
+    return `91${digitsOnly}`;
+  }
+  
+  // If already starts with 91 and has 12 digits total, return as is
+  if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
+    return digitsOnly;
+  }
+  
+  // If 11 digits and starts with 0, remove 0 and prepend 91
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
+    return `91${digitsOnly.substring(1)}`;
+  }
+  
+  // Return cleaned digits (for other formats)
+  return digitsOnly;
+}
+
 export default function Signup() {
   const router = useRouter();
   // Using useSearchParams from next/navigation might be cleaner, but current setup works
   // Let's add useSearchParams
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
 
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    password: "",
-    confirmPassword: "",
-    role: "",
-  });
+  // Pre-fill form data from URL params (for Google OAuth signup)
+  const getInitialFormData = () => {
+    if (typeof window !== 'undefined' && searchParams) {
+      return {
+        name: searchParams.get('name') || "",
+        email: searchParams.get('email') || "",
+        phone: searchParams.get('phone') || "",
+        password: "",
+        confirmPassword: "",
+        role: searchParams.get('role') || "",
+      };
+    }
+    return {
+      name: "",
+      email: "",
+      phone: "",
+      password: "",
+      confirmPassword: "",
+      role: "",
+    };
+  };
+
+  const [formData, setFormData] = useState(getInitialFormData());
   const [loading, setLoading] = useState(false);
 
-  // Check for error on mount
+  // Check for error on mount and pre-fill data
   useState(() => {
     if (typeof window !== 'undefined') {
       const error = new URLSearchParams(window.location.search).get('error');
@@ -35,6 +83,22 @@ export default function Signup() {
         // Use setTimeout to ensure toastr library is ready/mounted effectively by react logic
         setTimeout(() => toastrError(decodeURIComponent(error)), 500);
         // Clean URL? Optional.
+      }
+      
+      // Pre-fill form if coming from Google OAuth
+      const fromGoogle = searchParams?.get('fromGoogle');
+      if (fromGoogle === 'true') {
+        const email = searchParams.get('email');
+        const name = searchParams.get('name');
+        const role = searchParams.get('role');
+        if (email || name || role) {
+          setFormData(prev => ({
+            ...prev,
+            ...(email && { email }),
+            ...(name && { name }),
+            ...(role && { role })
+          }));
+        }
       }
     }
   }, []);
@@ -46,7 +110,7 @@ export default function Signup() {
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    const { name, email, password, confirmPassword, role } = formData;
+    const { name, email, phone, password, confirmPassword, role } = formData;
 
     if (!name || !email || !password || !role) {
       toastrError("Please fill all required fields!");
@@ -63,12 +127,22 @@ export default function Signup() {
       return;
     }
 
+    // Format phone number if provided (optional for signup)
+    let formattedPhone = null;
+    if (phone) {
+      formattedPhone = formatPhoneNumber(phone);
+      if (!formattedPhone || formattedPhone.length < 10) {
+        toastrError("Please enter a valid phone number or leave it blank!");
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const signupData = {
         name,
         email,
-        phone: formData.phone || null,
+        phone: formattedPhone, // Can be null
         password,
         role: role === 'coach' ? 'mentor' : 'user' // Map 'coach' to 'mentor'
       };
@@ -231,8 +305,12 @@ export default function Signup() {
                   value={formData.phone}
                   onChange={handleChange}
                   className="input-professional"
-                  placeholder="+1 (555) 000-0000"
+                  placeholder="10-digit mobile number (e.g., 9876543210)"
+                  pattern="[0-9]{10}"
+                  minLength={10}
+                  maxLength={12}
                 />
+                <p className="text-xs text-gray-500 mt-1">Optional. 10-digit number will be prefixed with +91. Required for mentors when filling profile.</p>
               </div>
 
               <div>
