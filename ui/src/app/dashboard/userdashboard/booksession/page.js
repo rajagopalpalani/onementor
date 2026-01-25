@@ -11,6 +11,7 @@ import { getCalendarStatus, getCalendarAuthUrl } from "@/services/calendar/userC
 import { createBooking } from "@/services/payment/payment";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { config } from "@/util/config";
 
 const BookSessionPageContent = () => {
   const [coach, setCoach] = useState(null);
@@ -442,7 +443,8 @@ const BookSessionPageContent = () => {
     const userId = localStorage.getItem("userId");
     const totalHours = calculateTotalHours(selectedSlots);
     const perSlotRate = parseFloat(coach?.hourly_rate || 0) || 0;
-    const amountTotal = Math.round(perSlotRate * totalHours);
+    const baseAmount = Math.round(perSlotRate * totalHours);
+    const amountTotal = baseAmount + (config.PLATFORM_FEE || 0);
 
     try {
       const amount = amountTotal;
@@ -508,7 +510,8 @@ const BookSessionPageContent = () => {
   }
 
   const perSlotRateDisplay = coach?.hourly_rate ? `₹${parseFloat(coach.hourly_rate).toLocaleString('en-IN')}` : '₹0';
-  const amountTotal = Math.round((parseFloat(coach?.hourly_rate || 0) || 0) * calculateTotalHours(selectedSlots));
+  const baseAmount = Math.round((parseFloat(coach?.hourly_rate || 0) || 0) * calculateTotalHours(selectedSlots));
+  const amountTotal = baseAmount + (config.PLATFORM_FEE || 0);
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50">
@@ -726,6 +729,11 @@ const BookSessionPageContent = () => {
                       {perSlotRateDisplay}
                     </p>
                     <p className="font-semibold">
+                      <span className="text-gray-600">Platform Fee:</span>
+                      <CurrencyRupeeIcon className="w-4 h-4 inline mx-1" />
+                      {`₹${(config.PLATFORM_FEE || 0).toLocaleString('en-IN')}`}
+                    </p>
+                    <p className="font-semibold">
                       <span className="text-gray-600">Total:</span>
                       <CurrencyRupeeIcon className="w-4 h-4 inline mx-1" />
                       {`₹${amountTotal.toLocaleString('en-IN')}`}
@@ -796,10 +804,14 @@ const BookSessionPageContent = () => {
                     ))}
                   </div>
                 </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Platform Fee</span>
+                  <span className="font-semibold text-gray-900">₹{(config.PLATFORM_FEE || 0).toLocaleString('en-IN')}</span>
+                </div>
                 <div className="border-t border-gray-200 pt-4 flex justify-between items-center">
                   <span className="text-lg font-bold text-gray-900">Total Amount</span>
                   <span className="text-2xl font-bold text-[var(--primary)]">
-                    ₹{Math.round((parseFloat(coach?.hourly_rate || 0)) * calculateTotalHours(selectedSlots)).toLocaleString('en-IN')}
+                    ₹{amountTotal.toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>

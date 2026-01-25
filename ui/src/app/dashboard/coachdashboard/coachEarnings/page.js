@@ -36,7 +36,7 @@ const EarningsPage = () => {
 
       setLoading(true);
       // Fetch both confirmed and completed bookings
-      const response = await axios.get(`${API_URL}/api/mentor/requests/${userId}?status=confirmed,completed`);
+      const response = await axios.get(`${API_URL}mentor/requests/${userId}?status=confirmed,completed`);
 
       const data = response.data || [];
       setSessions(data);

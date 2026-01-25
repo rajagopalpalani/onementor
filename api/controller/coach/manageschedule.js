@@ -25,7 +25,7 @@ exports.getSlotsByMentor = async (req, res) => {
         u.name as user_name,
         u.email as user_email
       FROM mentor_slots ms
-      LEFT JOIN bookings b ON ms.id = b.slot_id AND b.status IN ('confirmed', 'completed')
+      LEFT JOIN bookings b ON JSON_CONTAINS(b.slots, CAST(ms.id AS JSON)) AND b.status IN ('confirmed', 'completed')
       LEFT JOIN users u ON b.user_id = u.id
       WHERE ms.mentor_id = ?
     `;

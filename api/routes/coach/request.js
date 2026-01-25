@@ -16,7 +16,7 @@ router.get("/:mentor_id", async (req, res) => {
         b.session_date,
         b.session_start_time,
         b.session_end_time,
-        b.amount,
+        b.total_amount as amount,
         b.created_at,
         b.slots,
         u.id as user_id,

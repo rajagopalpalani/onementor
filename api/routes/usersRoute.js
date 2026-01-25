@@ -3,6 +3,39 @@ const router = express.Router();
 const { createUser } = require('../services/userservices');
 const db = require('../config/mysql');
 
+/**
+ * Format phone number: if 10 digits, prepend 91 (India country code)
+ * @param {string} phone - Phone number to format
+ * @returns {string|null} - Formatted phone number or null if invalid
+ */
+function formatPhoneNumber(phone) {
+  if (!phone) return null;
+  
+  // Remove all non-digit characters
+  const digitsOnly = phone.replace(/\D/g, '');
+  
+  // If empty after cleaning, return null
+  if (!digitsOnly) return null;
+  
+  // If 10 digits, prepend 91
+  if (digitsOnly.length === 10) {
+    return `91${digitsOnly}`;
+  }
+  
+  // If already starts with 91 and has 12 digits total, return as is
+  if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
+    return digitsOnly;
+  }
+  
+  // If 11 digits and starts with 0, remove 0 and prepend 91
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
+    return `91${digitsOnly.substring(1)}`;
+  }
+  
+  // Return cleaned digits (for other formats)
+  return digitsOnly;
+}
+
 router.post('/signup', async (req, res) => {
   try {
     const { name, email, phone, password, role } = req.body;
@@ -21,7 +54,13 @@ router.post('/signup', async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters long' });
     }
 
-    const result = await createUser({ name, email, phone, password, role: role || 'user' });
+    // Format phone number if provided (optional for signup)
+    const formattedPhone = phone ? formatPhoneNumber(phone) : null;
+    if (phone && !formattedPhone) {
+      return res.status(400).json({ error: 'Invalid phone number format' });
+    }
+
+    const result = await createUser({ name, email, phone: formattedPhone, password, role: role || 'user' });
     
     if (result.error) {
       return res.status(result.status || 400).json({ error: result.error });

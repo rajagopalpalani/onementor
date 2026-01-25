@@ -230,3 +230,42 @@ export async function getMentorUpcomingSessions(mentorId) {
     return { error: "Network error" };
   }
 }
+
+// Get mentor session history
+export async function getMentorSessionHistory(mentorId) {
+  try {
+    const res = await fetch(`${API_URL}mentor/sessions/history/${mentorId}`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { error: data.error || "Failed to fetch session history" };
+    }
+    return data;
+  } catch (err) {
+    console.error("getMentorSessionHistory error", err);
+    return { error: "Network error" };
+  }
+}
+
+// Mark session as complete
+export async function markSessionAsCompleted(bookingId, mentorId) {
+  try {
+    const res = await fetch(`${API_URL}mentor/sessions/complete/${bookingId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ mentor_id: mentorId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { error: data.error || 'Failed to mark session as complete' };
+    }
+    return data;
+  } catch (err) {
+    console.error('markSessionComplete error', err);
+    return { error: 'Network error' };
+  }
+}

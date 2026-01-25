@@ -5,6 +5,8 @@ const { createAndSendOtp } = require('./otpservice');
 async function createUser({ name, email, phone, password, role }) {
   const conn = await pool.getConnection();
   try {
+    // Phone is optional for signup (will be required when mentor fills profile)
+    
     // Check if user already exists
     const [existing] = await conn.query(
       `SELECT id FROM users WHERE email = ?`,
@@ -18,7 +20,7 @@ async function createUser({ name, email, phone, password, role }) {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Insert user
+    // Insert user (phone can be null)
     const [result] = await conn.query(
       `INSERT INTO users (name, email, phone, password_hash, role, is_verified) VALUES (?, ?, ?, ?, ?, 0)`,
       [name, email, phone || null, passwordHash, role || 'user']

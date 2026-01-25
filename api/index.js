@@ -50,11 +50,42 @@ if (process.env.SSL === 'true') {
   });
 }
 
-// CORS setup for frontend
+// CORS setup for frontend - Allow both HTTP and HTTPS origins
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:3000',
+  // Add HTTP version if FRONTEND_URL is HTTPS
+  ...(process.env.FRONTEND_URL && process.env.FRONTEND_URL.startsWith('https://') 
+    ? [process.env.FRONTEND_URL.replace('https://', 'http://')] 
+    : []),
+  // Add HTTPS version if FRONTEND_URL is HTTP
+  ...(process.env.FRONTEND_URL && process.env.FRONTEND_URL.startsWith('http://') 
+    ? [process.env.FRONTEND_URL.replace('http://', 'https://')] 
+    : []),
+  'http://localhost:3000',
+  'https://localhost:3000'
+].filter(Boolean); // Remove any undefined/null values
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      // For development, allow any localhost origin
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
 }));
 
 // Body parsers
@@ -65,15 +96,21 @@ app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Session setup
+// If allowing HTTP frontend with HTTPS backend, set secure: false
+// Otherwise, use secure cookies in production
+const allowHttpFrontend = process.env.ALLOW_HTTP_FRONTEND === 'true';
+const cookieSecure = process.env.COOKIE_SECURE === 'true' || 
+  (process.env.COOKIE_SECURE !== 'false' && process.env.NODE_ENV === 'production' && !allowHttpFrontend);
+
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
   resave: false,
   saveUninitialized: false,
   cookie: {
     maxAge: 1000 * 60 * 60 * 24, // 24 hours
-    secure: process.env.NODE_ENV === 'production', // HTTPS in production
+    secure: cookieSecure, // false when allowing HTTP frontend, true in production otherwise
     httpOnly: true,
-    sameSite: 'lax'
+    sameSite: process.env.COOKIE_SAME_SITE || 'lax' // 'lax' works for HTTP to HTTPS requests
   }
 }));
 

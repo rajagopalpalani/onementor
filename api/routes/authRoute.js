@@ -7,6 +7,40 @@ const { google } = require('googleapis');
 const crypto = require('crypto');
 const pool = require('../config/mysql');
 const jwt = require('jsonwebtoken');
+const { log } = require('console');
+
+/**
+ * Format phone number: if 10 digits, prepend 91 (India country code)
+ * @param {string} phone - Phone number to format
+ * @returns {string|null} - Formatted phone number or null if invalid
+ */
+function formatPhoneNumber(phone) {
+  if (!phone) return null;
+  
+  // Remove all non-digit characters
+  const digitsOnly = phone.replace(/\D/g, '');
+  
+  // If empty after cleaning, return null
+  if (!digitsOnly) return null;
+  
+  // If 10 digits, prepend 91
+  if (digitsOnly.length === 10) {
+    return `91${digitsOnly}`;
+  }
+  
+  // If already starts with 91 and has 12 digits total, return as is
+  if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
+    return digitsOnly;
+  }
+  
+  // If 11 digits and starts with 0, remove 0 and prepend 91
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
+    return `91${digitsOnly.substring(1)}`;
+  }
+  
+  // Return cleaned digits (for other formats)
+  return digitsOnly;
+}
 
 /**
  * @swagger
@@ -255,13 +289,15 @@ router.get('/google/url', (req, res) => {
   const scopes = isLogin
     ? [
       'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/userinfo.profile'
+      'https://www.googleapis.com/auth/userinfo.profile',
+      'https://www.googleapis.com/auth/user.phonenumbers.read'
     ]
     : [
       'https://www.googleapis.com/auth/calendar',
       'https://www.googleapis.com/auth/calendar.events',
       'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/userinfo.profile'
+      'https://www.googleapis.com/auth/userinfo.profile',
+      'https://www.googleapis.com/auth/user.phonenumbers.read'
     ];
 
   const authOptions = {
@@ -293,6 +329,8 @@ router.get('/google/callback', async (req, res) => {
   const apiBaseUrl = process.env.API_BASE_URL || 'http://localhost:8001';
   const redirectUri = `${apiBaseUrl}/api/auth/google/callback`;
 
+  console.log('redirectUri', redirectUri, frontendUrl);
+
 
   if (!code) {
     console.error('No code provided in callback');
@@ -319,6 +357,26 @@ router.get('/google/callback', async (req, res) => {
       return res.redirect(`${frontendUrl}/login?error=No+Email+Provided`);
     }
 
+    // Get phone number from Google People API
+    let phone = null;
+    try {
+      const people = google.people({ version: 'v1', auth: oauth2Client });
+      const peopleInfo = await people.people.get({
+        resourceName: 'people/me',
+        personFields: 'phoneNumbers'
+      });
+      
+      if (peopleInfo.data.phoneNumbers && peopleInfo.data.phoneNumbers.length > 0) {
+        // Get the first phone number
+        phone = peopleInfo.data.phoneNumbers[0].value;
+        // Remove any non-digit characters
+        phone = phone.replace(/\D/g, '');
+      }
+    } catch (phoneError) {
+      console.warn('Could not fetch phone number from Google:', phoneError.message);
+      // Continue without phone, but will require it for signup
+    }
+
     // Parse state
     let role = 'user';
     let intent = 'signup'; // Default intent
@@ -332,6 +390,9 @@ router.get('/google/callback', async (req, res) => {
       console.warn('Failed to parse state', state);
     }
 
+    // Format phone number if available (optional for signup)
+    const formattedPhone = phone ? formatPhoneNumber(phone) : null;
+
     // Check if user exists
     let user = await findUserByEmail(email);
 
@@ -342,6 +403,7 @@ router.get('/google/callback', async (req, res) => {
       }
 
       // User does not exist -> Signup
+      // Phone is optional for signup, will be required when mentor fills profile
       const password = crypto.randomBytes(16).toString('hex'); // Random password
 
       // Sanitizing inputs to match schema limits
@@ -353,7 +415,7 @@ router.get('/google/callback', async (req, res) => {
         email: safeEmail,
         password, // Hashed by createUser
         role,
-        phone: null
+        phone: formattedPhone // Can be null
       });
 
       // Fetch the created user

@@ -8,11 +8,14 @@ import {
   ChatBubbleLeftRightIcon,
   ArrowLeftIcon,
   InformationCircleIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  CheckCircleIcon,
+  XCircleIcon
 } from "@heroicons/react/24/outline";
 import Header from "@/components/Header/header";
 import Footer from "@/components/Footer/footer";
-import { getUserUpcomingSessions, getUserSessionHistory } from "@/services/booking/booking";
+import { getUserUpcomingSessions, getUserSessionHistory, markSessionComplete } from "@/services/booking/booking";
+import { toastrSuccess, toastrError } from "@/components/ui/toaster/toaster";
 import { useRouter } from "next/navigation";
 import Loader from "@/components/ui/loader/loader";
 
@@ -22,6 +25,7 @@ const UserSchedule = () => {
   const [upcomingSessions, setUpcomingSessions] = useState([]);
   const [historySessions, setHistorySessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -56,6 +60,25 @@ const UserSchedule = () => {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleMarkComplete = async (bookingId) => {
+    setActionLoading(bookingId);
+    try {
+      const userId = localStorage.getItem("userId");
+      const res = await markSessionComplete(bookingId, userId);
+      if (res.error) {
+        toastrError(res.error);
+      } else {
+        toastrSuccess(res.message || "Session marked as completed");
+        fetchUserSessions(); // Refresh data
+      }
+    } catch (error) {
+      console.error("Error marking complete:", error);
+      toastrError("Something went wrong");
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -182,12 +205,37 @@ const UserSchedule = () => {
           </>
         ) : (
           <>
-            <button className="flex-1 text-indigo-600 hover:text-indigo-700 text-xs font-bold flex items-center gap-1 transition-colors">
-              Session Feedback <ChevronRightIcon className="w-3 h-3" />
-            </button>
-            <button className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-extrabold uppercase tracking-widest text-gray-600 hover:bg-gray-50 transition-colors">
-              Re-book
-            </button>
+            {session.status === 'completed' ? (
+              <div className="flex-1 flex items-center justify-center gap-2 text-green-600 font-bold text-xs bg-green-50 py-2.5 rounded-xl border border-green-100">
+                <CheckCircleIcon className="w-4 h-4" />
+                Completed
+              </div>
+            ) : session.user_completed ? (
+              <div className="flex-1 flex items-center justify-center gap-2 text-amber-600 font-bold text-xs bg-amber-50 py-2.5 rounded-xl border border-amber-100">
+                <ClockIcon className="w-4 h-4" />
+                Waiting for Mentor
+              </div>
+            ) : session.status !== 'cancelled' ? (
+              <button
+                onClick={() => handleMarkComplete(session.booking_id)}
+                disabled={actionLoading === session.booking_id}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-green-200 text-green-700 rounded-xl text-xs font-bold hover:bg-green-50 transition-colors"
+              >
+                {actionLoading === session.booking_id ? (
+                  <div className="spinner w-4 h-4 border-green-600"></div>
+                ) : (
+                  <>
+                    <CheckCircleIcon className="w-4 h-4" />
+                    Mark Completed
+                  </>
+                )}
+              </button>
+            ) : (
+              <div className="flex-1 flex items-center justify-center gap-2 text-red-600 font-bold text-xs bg-red-50 py-2.5 rounded-xl border border-red-100">
+                <XCircleIcon className="w-4 h-4" />
+                Cancelled
+              </div>
+            )}
           </>
         )}
       </div>

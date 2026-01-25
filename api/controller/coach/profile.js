@@ -1,10 +1,43 @@
 const db = require("../../config/mysql");
 
+/**
+ * Format phone number: if 10 digits, prepend 91 (India country code)
+ * @param {string} phone - Phone number to format
+ * @returns {string|null} - Formatted phone number or null if invalid
+ */
+function formatPhoneNumber(phone) {
+  if (!phone) return null;
+  
+  // Remove all non-digit characters
+  const digitsOnly = phone.replace(/\D/g, '');
+  
+  // If empty after cleaning, return null
+  if (!digitsOnly) return null;
+  
+  // If 10 digits, prepend 91
+  if (digitsOnly.length === 10) {
+    return `91${digitsOnly}`;
+  }
+  
+  // If already starts with 91 and has 12 digits total, return as is
+  if (digitsOnly.startsWith('91') && digitsOnly.length === 12) {
+    return digitsOnly;
+  }
+  
+  // If 11 digits and starts with 0, remove 0 and prepend 91
+  if (digitsOnly.length === 11 && digitsOnly.startsWith('0')) {
+    return `91${digitsOnly.substring(1)}`;
+  }
+  
+  // Return cleaned digits (for other formats)
+  return digitsOnly;
+}
+
 // Create or update mentor profile
 exports.createMentorProfile = async (req, res) => {
   try {
     // Handle both JSON and FormData
-    const { user_id, username, category, bio, skills, other_skills, hourly_rate } = req.body;
+    const { user_id, username, category, bio, skills, other_skills, hourly_rate, phone } = req.body;
     const resume = req.file ? req.file.filename : null;
 
     // Parse JSON strings if they come from FormData
@@ -39,7 +72,7 @@ exports.createMentorProfile = async (req, res) => {
 
     // Check if user is a mentor
     const [userCheck] = await db.query(
-      "SELECT id, role FROM users WHERE id = ? AND role = 'mentor'",
+      "SELECT id, role, phone FROM users WHERE id = ? AND role = 'mentor'",
       [userId]
     );
 
@@ -52,6 +85,23 @@ exports.createMentorProfile = async (req, res) => {
       "SELECT id FROM mentor_profiles WHERE user_id = ?",
       [userId]
     );
+
+    // Phone is mandatory only when creating a NEW profile AND user doesn't have phone
+    const userHasPhone = userCheck[0].phone && userCheck[0].phone.trim() !== '';
+    const isNewProfile = existing.length === 0;
+    
+    if (isNewProfile && !userHasPhone && !phone) {
+      return res.status(400).json({ error: "Phone number is required when creating mentor profile" });
+    }
+
+    // Format phone number if provided
+    let formattedPhone = null;
+    if (phone) {
+      formattedPhone = formatPhoneNumber(phone);
+      if (!formattedPhone) {
+        return res.status(400).json({ error: "Invalid phone number format" });
+      }
+    }
 
     let skillsJson = null;
     let otherSkillsJson = null;
@@ -77,11 +127,29 @@ exports.createMentorProfile = async (req, res) => {
     await connection.beginTransaction();
 
     try {
-      if (username) {
-        await connection.query(
-          "UPDATE users SET name = ? WHERE id = ?",
-          [username, userId]
-        );
+      // Update user name and phone (only if provided)
+      if (username || formattedPhone) {
+        const updateFields = [];
+        const updateValues = [];
+        
+        if (username) {
+          updateFields.push("name = ?");
+          updateValues.push(username);
+        }
+        
+        // Only update phone if provided
+        if (formattedPhone) {
+          updateFields.push("phone = ?");
+          updateValues.push(formattedPhone);
+        }
+        
+        if (updateFields.length > 0) {
+          updateValues.push(userId);
+          await connection.query(
+            `UPDATE users SET ${updateFields.join(", ")} WHERE id = ?`,
+            updateValues
+          );
+        }
       }
 
       if (existing.length > 0) {
