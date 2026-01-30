@@ -17,8 +17,9 @@ CREATE TABLE IF NOT EXISTS `admins` (
 -- Insert the default admin user
 -- Email: prwebinfo@gmail.com
 -- Password: admin123 (hashed with bcrypt)
+-- Note: Run simpleInsertAdmin.js to create/update admin with correct password hash
 INSERT INTO `admins` (`name`, `email`, `password`, `role`) VALUES 
-('Admin User', 'prwebinfo@gmail.com', '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin')
+('Admin User', 'prwebinfo@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhkO', 'admin')
 ON DUPLICATE KEY UPDATE 
 `name` = VALUES(`name`),
 `password` = VALUES(`password`),

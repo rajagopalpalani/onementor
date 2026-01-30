@@ -114,4 +114,26 @@ router.get('/all', async (req, res) => {
   }
 });
 
+// Get single user by ID (for admin)
+router.get('/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const query = "SELECT id, name, email, phone, role, is_verified, is_active, created_at FROM users WHERE id = ?";
+    const [rows] = await db.query(query, [userId]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      data: rows[0]
+    });
+  } catch (err) {
+    console.error('Get user by ID error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

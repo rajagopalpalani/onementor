@@ -7,6 +7,8 @@ class AdminAuthController {
     try {
       const { email, password } = req.body;
 
+      console.log('Admin login attempt:', { email, passwordLength: password?.length });
+
       // Validate input
       if (!email || !password) {
         return res.status(400).json({
@@ -18,14 +20,19 @@ class AdminAuthController {
       // Find admin by email
       const admin = await AdminModel.findByEmail(email);
       if (!admin) {
+        console.log('Admin not found:', email);
         return res.status(401).json({
           success: false,
           message: 'Invalid admin credentials'
         });
       }
 
+      console.log('Admin found:', { id: admin.id, email: admin.email });
+
       // Verify password
       const isPasswordValid = await AdminModel.verifyPassword(password, admin.password);
+      console.log('Password verification result:', isPasswordValid);
+      
       if (!isPasswordValid) {
         return res.status(401).json({
           success: false,

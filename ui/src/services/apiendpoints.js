@@ -1,4 +1,8 @@
-export const API_URL = 'https://api.onementor.in/api/';
+// Use environment variable or fallback to production URL
+export const API_URL = process.env.NEXT_PUBLIC_API_URL 
+  ? `${process.env.NEXT_PUBLIC_API_URL}/api/`
+  : 'http://localhost:8001/api/';
+  
 export const APIURL = API_URL;
 
 export const APIENDPOINTS = {

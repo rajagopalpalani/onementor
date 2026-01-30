@@ -19,7 +19,10 @@ export default function Page() {
     setError("");
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/api/admin/login`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+      console.log('Attempting login to:', `${apiUrl}/api/admin/login`);
+      
+      const response = await fetch(`${apiUrl}/api/admin/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -31,9 +34,11 @@ export default function Page() {
         })
       });
 
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
 
-      if (data.success) {
+      if (response.ok && data.success) {
         // Store admin data in localStorage for client-side access
         localStorage.setItem('adminToken', data.data.token);
         localStorage.setItem('adminData', JSON.stringify(data.data.admin));
@@ -41,11 +46,11 @@ export default function Page() {
         // Redirect to admin dashboard
         router.push("/admin/dashboard");
       } else {
-        setError(data.message || 'Login failed');
+        setError(data.message || 'Login failed. Please check your credentials.');
       }
     } catch (error) {
       console.error('Login error:', error);
-      setError('Network error. Please check your connection and try again.');
+      setError('Network error. Please check if the API server is running.');
     } finally {
       setIsLoading(false);
     }
