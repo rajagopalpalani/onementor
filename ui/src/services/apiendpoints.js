@@ -1,7 +1,5 @@
 // Use environment variable or fallback to production URL
-export const API_URL = process.env.NEXT_PUBLIC_API_URL 
-  ? `${process.env.NEXT_PUBLIC_API_URL}/api/`
-  : 'http://localhost:8001/api/';
+export const API_URL ='http://localhost:8001/api/';
   
 export const APIURL = API_URL;
 
