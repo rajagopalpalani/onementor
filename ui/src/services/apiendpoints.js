@@ -1,6 +1,4 @@
-// Use environment variable or fallback to production URL
-export const API_URL ='http://localhost:8001/api/';
-  
+export const API_URL = 'https://api.onementor.in/api/';
 export const APIURL = API_URL;
 
 export const APIENDPOINTS = {
