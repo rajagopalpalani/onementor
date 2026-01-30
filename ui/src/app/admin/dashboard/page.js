@@ -222,9 +222,10 @@ export default function AdminDashboard() {
                   (activeTab === "mentors" ? mentors : mentees).map((user, index) => (
                     <tr
                       key={user.id ?? index}
-                      className="border-b last:border-0 hover:bg-slate-50 transition"
+                      className="border-b last:border-0 hover:bg-slate-50 transition cursor-pointer"
+                      onClick={() => router.push(`/admin/users/${user.id}`)}
                     >
-                      <td className="px-4 py-4 font-medium text-slate-800">
+                      <td className="px-4 py-4 font-medium text-blue-600 hover:text-blue-800 hover:underline">
                         {user.name ?? "N/A"}
                       </td>
                       <td className="px-4 py-4 text-slate-500">

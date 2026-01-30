@@ -15,6 +15,7 @@ require('dotenv').config();
 const userRouter = require('./routes/usersRoute');
 const authRoutes = require("./routes/authRoute");
 const adminAuthRoutes = require("./routes/adminAuthRoutes");
+const adminUsersRoutes = require("./routes/adminUsersRoute");
 const profileRoutes = require('./routes/user/profileRoutes');
 const mentorRoutes = require("./routes/user/coachdiscover"); // Mentor discovery
 const bookingRoutes = require("./routes/user/bookslot");
@@ -129,6 +130,9 @@ app.use("/api/auth", authRoutes);
 
 // Admin Authentication
 app.use("/api/admin", adminAuthRoutes);
+
+// Admin Users (for viewing user details and sessions)
+app.use("/api/admin/users", adminUsersRoutes);
 
 // User management
 app.use('/api/users', userRouter);
